@@ -1,6 +1,6 @@
 """
 Verilog Parser implementation using PLY
-(Comprehensive implementation with proper PLY structure)
+(Comprehensive implementation with full Verilog language support)
 """
 
 import sys
@@ -65,10 +65,8 @@ tokens = (
     'SHIFT_LEFT',
     'SHIFT_RIGHT',
     'NON_BLOCKING_ASSIGN',
-    'BLOCKING_ASSIGN',
     'AT',
-    'QUESTION',
-    'CONCAT',
+    'HASH',
 
     # Verilog Keywords
     'MODULE',
@@ -94,12 +92,17 @@ tokens = (
     'POSEDGE',
     'NEGEDGE',
     'OR',
-    'AND',
-    'CLOCK',
-    'RESET',
-    'LOGIC',
-    'BIT',
-    'ASSIGN_KW'
+    'ASSIGN_KW',
+    'FUNCTION',
+    'ENDFUNCTION',
+    'TASK',
+    'ENDTASK',
+    'GENERATE',
+    'ENDGENERATE',
+    'INTEGER',
+    'REAL',
+    'TIME',
+    'REALTIME'
 )
 
 # Verilog reserved words
@@ -127,11 +130,17 @@ reserved = {
     'posedge': 'POSEDGE',
     'negedge': 'NEGEDGE',
     'or': 'OR',
-    'and': 'AND',
-    # Note: clk, clock, rst, reset are treated as identifiers, not keywords
-    'logic': 'LOGIC',
-    'bit': 'BIT',
-    'assign': 'ASSIGN_KW'
+    'assign': 'ASSIGN_KW',
+    'function': 'FUNCTION',
+    'endfunction': 'ENDFUNCTION',
+    'task': 'TASK',
+    'endtask': 'ENDTASK',
+    'generate': 'GENERATE',
+    'endgenerate': 'ENDGENERATE',
+    'integer': 'INTEGER',
+    'real': 'REAL',
+    'time': 'TIME',
+    'realtime': 'REALTIME'
 }
 
 # Token rules
@@ -145,8 +154,8 @@ t_LBRACKET = r'\['
 t_RBRACKET = r'\]'
 t_LBRACE = r'\{'
 t_RBRACE = r'\}'
-t_QUESTION = r'\?'
 t_AT = r'@'
+t_HASH = r'\#'
 
 # Operators (order matters for multi-character operators)
 t_SHIFT_LEFT = r'<<'
@@ -155,7 +164,6 @@ t_LOGICAL_AND = r'&&'
 t_LOGICAL_OR = r'\|\|'
 t_EQUAL = r'=='
 t_NOT_EQUAL = r'!='
-t_NON_BLOCKING_ASSIGN = r'<='
 t_GREATER_EQUAL = r'>='
 t_ASSIGN = r'='
 t_LESS_THAN = r'<'
@@ -170,7 +178,12 @@ t_BITWISE_OR = r'\|'
 t_BITWISE_XOR = r'\^'
 t_BITWISE_NOT = r'~'
 t_LOGICAL_NOT = r'!'
-t_CONCAT = r'\{'
+
+def t_NON_BLOCKING_ASSIGN(t):
+    r'<='
+    return t
+
+# NON_BLOCKING_ASSIGN (<= ) is used for both assignments and comparisons
 
 # Ignored characters
 t_ignore = ' \t'
@@ -197,7 +210,7 @@ def t_STRING_LITERAL(t):
     return t
 
 def t_NUMBER(t):
-    r'\d+\'[bBoOdDhH][0-9a-fA-F_xXzZ]+|\d+(\.\d+)?([eE][+-]?\d+)?'
+    r"(\d+\'[bBoOdDhH][0-9a-fA-F_xXzZ]+|\d+(\.\d+)?([eE][+-]?\d+)?|\d+)"
     return t
 
 def t_IDENTIFIER(t):
@@ -217,6 +230,22 @@ def find_column(token):
     line_start = token.lexer.lexdata.rfind('\n', 0, token.lexpos) + 1
     return (token.lexpos - line_start) + 1
 
+# Operator precedence (lowest to highest)
+precedence = (
+    ('left', 'LOGICAL_OR'),
+    ('left', 'LOGICAL_AND'),
+    ('left', 'BITWISE_OR'),
+    ('left', 'BITWISE_XOR'),
+    ('left', 'BITWISE_AND'),
+    ('left', 'EQUAL', 'NOT_EQUAL'),
+    ('left', 'LESS_THAN', 'NON_BLOCKING_ASSIGN', 'GREATER_THAN', 'GREATER_EQUAL'),
+    ('left', 'SHIFT_LEFT', 'SHIFT_RIGHT'),
+    ('left', 'PLUS', 'MINUS'),
+    ('left', 'MULTIPLY', 'DIVIDE', 'MODULO'),
+    ('right', 'UMINUS', 'UPLUS', 'LOGICAL_NOT', 'BITWISE_NOT'),
+    ('left', 'LBRACKET'),
+)
+
 # Grammar rules
 def p_source_text(p):
     '''source_text : description_list'''
@@ -233,7 +262,8 @@ def p_description(p):
     pass
 
 def p_module_declaration(p):
-    '''module_declaration : MODULE IDENTIFIER LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
+    '''module_declaration : MODULE IDENTIFIER parameter_port_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
+                         | MODULE IDENTIFIER LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER SEMICOLON module_items ENDMODULE'''
     global current_document, current_tokens
     
@@ -241,7 +271,12 @@ def p_module_declaration(p):
     module = VerilogModule(module_name)
     
     # Extract ports if they exist
-    if len(p) == 9:  # Module with ports
+    if len(p) == 10:  # Module with parameters and ports
+        if p[5]:  # port_list exists
+            port_groups = extract_port_groups(p[5], current_tokens)
+            for group in port_groups:
+                module.add_port_group(group)
+    elif len(p) == 9:  # Module with ports only
         if p[4]:  # port_list exists
             port_groups = extract_port_groups(p[4], current_tokens)
             for group in port_groups:
@@ -249,6 +284,16 @@ def p_module_declaration(p):
     
     if current_document:
         current_document.add_design_unit(module)
+
+def p_parameter_port_list(p):
+    '''parameter_port_list : 
+                          | HASH LPAREN parameter_list RPAREN'''
+    pass
+
+def p_parameter_list(p):
+    '''parameter_list : parameter_declaration
+                     | parameter_list COMMA parameter_declaration'''
+    pass
 
 def p_port_list(p):
     '''port_list : 
@@ -270,34 +315,30 @@ def p_port_list_items(p):
 
 def p_port(p):
     '''port : IDENTIFIER
+           | INPUT net_type range IDENTIFIER
+           | OUTPUT net_type range IDENTIFIER
+           | INOUT net_type range IDENTIFIER
+           | INPUT range IDENTIFIER
+           | OUTPUT range IDENTIFIER
+           | INOUT range IDENTIFIER
            | INPUT IDENTIFIER
            | OUTPUT IDENTIFIER
-           | INOUT IDENTIFIER
-           | INPUT WIRE IDENTIFIER
-           | OUTPUT WIRE IDENTIFIER
-           | INOUT WIRE IDENTIFIER
-           | INPUT REG IDENTIFIER
-           | OUTPUT REG IDENTIFIER
-           | INPUT LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | OUTPUT LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | INOUT LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | INPUT WIRE LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | OUTPUT WIRE LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | INOUT WIRE LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | INPUT REG LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER
-           | OUTPUT REG LBRACKET NUMBER COLON NUMBER RBRACKET IDENTIFIER'''
+           | INOUT IDENTIFIER'''
     
     # Extract port information
     if len(p) == 2:  # Just identifier
         p[0] = {'name': p[1], 'direction': None, 'type': None, 'range': None}
     elif len(p) == 3:  # direction + identifier
         p[0] = {'name': p[2], 'direction': p[1], 'type': None, 'range': None}
-    elif len(p) == 4:  # direction + type + identifier
-        p[0] = {'name': p[3], 'direction': p[1], 'type': p[2], 'range': None}
-    elif len(p) == 7:  # direction + [range] + identifier
-        p[0] = {'name': p[6], 'direction': p[1], 'type': None, 'range': f"[{p[3]}:{p[5]}]"}
-    elif len(p) == 8:  # direction + type + [range] + identifier
-        p[0] = {'name': p[7], 'direction': p[1], 'type': p[2], 'range': f"[{p[4]}:{p[6]}]"}
+    elif len(p) == 4:  # direction + range + identifier
+        p[0] = {'name': p[3], 'direction': p[1], 'type': None, 'range': p[2]}
+    elif len(p) == 5:  # direction + type + range + identifier
+        p[0] = {'name': p[4], 'direction': p[1], 'type': p[2], 'range': p[3]}
+
+def p_net_type(p):
+    '''net_type : WIRE
+               | REG'''
+    p[0] = p[1]
 
 def p_module_items(p):
     '''module_items : 
@@ -308,11 +349,18 @@ def p_module_item(p):
     '''module_item : port_declaration
                   | parameter_declaration
                   | localparam_declaration
-                  | wire_declaration
+                  | net_declaration
                   | reg_declaration
+                  | integer_declaration
+                  | real_declaration
+                  | time_declaration
                   | always_block
                   | initial_block
                   | assign_statement
+                  | module_instantiation
+                  | generate_block
+                  | function_declaration
+                  | task_declaration
                   | comment_or_empty'''
     pass
 
@@ -327,90 +375,146 @@ def p_empty(p):
     pass
 
 def p_port_declaration(p):
-    '''port_declaration : INPUT IDENTIFIER SEMICOLON
-                       | OUTPUT IDENTIFIER SEMICOLON
-                       | INOUT IDENTIFIER SEMICOLON
-                       | INPUT WIRE IDENTIFIER SEMICOLON
-                       | OUTPUT WIRE IDENTIFIER SEMICOLON
-                       | INOUT WIRE IDENTIFIER SEMICOLON
-                       | INPUT REG IDENTIFIER SEMICOLON
-                       | OUTPUT REG IDENTIFIER SEMICOLON
-                       | INPUT range IDENTIFIER SEMICOLON
-                       | OUTPUT range IDENTIFIER SEMICOLON
-                       | INOUT range IDENTIFIER SEMICOLON
-                       | INPUT WIRE range IDENTIFIER SEMICOLON
-                       | OUTPUT WIRE range IDENTIFIER SEMICOLON
-                       | INOUT WIRE range IDENTIFIER SEMICOLON
-                       | INPUT REG range IDENTIFIER SEMICOLON
-                       | OUTPUT REG range IDENTIFIER SEMICOLON'''
+    '''port_declaration : INPUT net_type range identifier_list SEMICOLON
+                       | OUTPUT net_type range identifier_list SEMICOLON
+                       | INOUT net_type range identifier_list SEMICOLON
+                       | INPUT range identifier_list SEMICOLON
+                       | OUTPUT range identifier_list SEMICOLON
+                       | INOUT range identifier_list SEMICOLON
+                       | INPUT identifier_list SEMICOLON
+                       | OUTPUT identifier_list SEMICOLON
+                       | INOUT identifier_list SEMICOLON'''
     pass
 
-def p_range(p):
-    '''range : LBRACKET NUMBER COLON NUMBER RBRACKET
-            | LBRACKET IDENTIFIER COLON IDENTIFIER RBRACKET
-            | LBRACKET expression COLON expression RBRACKET'''
-    pass
-
-def p_parameter_declaration(p):
-    '''parameter_declaration : PARAMETER IDENTIFIER ASSIGN expression SEMICOLON'''
-    pass
-
-def p_localparam_declaration(p):
-    '''localparam_declaration : LOCALPARAM IDENTIFIER ASSIGN expression SEMICOLON'''
-    pass
-
-def p_wire_declaration(p):
-    '''wire_declaration : WIRE IDENTIFIER SEMICOLON
-                       | WIRE range IDENTIFIER SEMICOLON'''
+def p_net_declaration(p):
+    '''net_declaration : WIRE range identifier_list SEMICOLON
+                      | WIRE identifier_list SEMICOLON'''
     pass
 
 def p_reg_declaration(p):
-    '''reg_declaration : REG IDENTIFIER SEMICOLON
-                      | REG range IDENTIFIER SEMICOLON'''
+    '''reg_declaration : REG range identifier_list SEMICOLON
+                      | REG identifier_list SEMICOLON'''
+    pass
+
+def p_integer_declaration(p):
+    '''integer_declaration : INTEGER identifier_list SEMICOLON'''
+    pass
+
+def p_real_declaration(p):
+    '''real_declaration : REAL identifier_list SEMICOLON'''
+    pass
+
+def p_time_declaration(p):
+    '''time_declaration : TIME identifier_list SEMICOLON
+                       | REALTIME identifier_list SEMICOLON'''
+    pass
+
+def p_identifier_list(p):
+    '''identifier_list : IDENTIFIER
+                      | identifier_list COMMA IDENTIFIER'''
+    pass
+
+def p_range(p):
+    '''range : 
+            | LBRACKET expression COLON expression RBRACKET'''
+    if len(p) == 1:
+        p[0] = None
+    else:
+        p[0] = f"[{p[2]}:{p[4]}]"
+
+def p_parameter_declaration(p):
+    '''parameter_declaration : PARAMETER parameter_assignments SEMICOLON
+                            | PARAMETER range parameter_assignments SEMICOLON'''
+    pass
+
+def p_localparam_declaration(p):
+    '''localparam_declaration : LOCALPARAM parameter_assignments SEMICOLON
+                             | LOCALPARAM range parameter_assignments SEMICOLON'''
+    pass
+
+def p_parameter_assignments(p):
+    '''parameter_assignments : parameter_assignment
+                            | parameter_assignments COMMA parameter_assignment'''
+    pass
+
+def p_parameter_assignment(p):
+    '''parameter_assignment : IDENTIFIER ASSIGN expression'''
     pass
 
 def p_always_block(p):
-    '''always_block : ALWAYS AT LPAREN sensitivity_list RPAREN statement'''
+    '''always_block : ALWAYS statement
+                   | ALWAYS AT LPAREN event_expression RPAREN statement'''
     pass
 
 def p_initial_block(p):
     '''initial_block : INITIAL statement'''
     pass
 
+def p_event_expression(p):
+    '''event_expression : event_expression OR event_expression
+                       | POSEDGE expression
+                       | NEGEDGE expression
+                       | expression
+                       | MULTIPLY'''
+    pass
+
 def p_assign_statement(p):
-    '''assign_statement : ASSIGN_KW IDENTIFIER ASSIGN expression SEMICOLON'''
+    '''assign_statement : ASSIGN_KW assignment_list SEMICOLON'''
     pass
 
-def p_sensitivity_list(p):
-    '''sensitivity_list : sensitivity_items'''
+def p_assignment_list(p):
+    '''assignment_list : assignment
+                      | assignment_list COMMA assignment'''
     pass
 
-def p_sensitivity_items(p):
-    '''sensitivity_items : sensitivity_item
-                        | sensitivity_items OR sensitivity_item'''
+def p_assignment(p):
+    '''assignment : lvalue ASSIGN expression'''
     pass
 
-def p_sensitivity_item(p):
-    '''sensitivity_item : IDENTIFIER
-                       | POSEDGE IDENTIFIER
-                       | NEGEDGE IDENTIFIER
-                       | POSEDGE IDENTIFIER OR NEGEDGE IDENTIFIER
-                       | NEGEDGE IDENTIFIER OR POSEDGE IDENTIFIER'''
+def p_lvalue(p):
+    '''lvalue : IDENTIFIER
+             | IDENTIFIER LBRACKET expression RBRACKET
+             | IDENTIFIER LBRACKET expression COLON expression RBRACKET
+             | concatenation'''
     pass
 
 def p_statement(p):
-    '''statement : assignment_statement
-                | BEGIN statement_list END
-                | IF LPAREN expression RPAREN statement
-                | IF LPAREN expression RPAREN statement ELSE statement
-                | CASE LPAREN expression RPAREN case_items ENDCASE
+    '''statement : blocking_assignment
+                | non_blocking_assignment
+                | procedural_continuous_assignment
+                | conditional_statement
+                | case_statement
+                | loop_statement
+                | seq_block
+                | par_block
+                | task_enable
+                | system_task_enable
+                | disable_statement
+                | event_trigger
                 | SEMICOLON'''
     pass
 
-def p_assignment_statement(p):
-    '''assignment_statement : IDENTIFIER ASSIGN expression SEMICOLON
-                           | IDENTIFIER NON_BLOCKING_ASSIGN expression SEMICOLON
-                           | IDENTIFIER LBRACKET expression RBRACKET ASSIGN expression SEMICOLON'''
+def p_blocking_assignment(p):
+    '''blocking_assignment : lvalue ASSIGN expression SEMICOLON
+                           | lvalue ASSIGN delay_or_event_control expression SEMICOLON'''
+    pass
+
+def p_non_blocking_assignment(p):
+    '''non_blocking_assignment : lvalue NON_BLOCKING_ASSIGN expression SEMICOLON
+                               | lvalue NON_BLOCKING_ASSIGN delay_or_event_control expression SEMICOLON'''
+    pass
+
+def p_procedural_continuous_assignment(p):
+    '''procedural_continuous_assignment : ASSIGN_KW lvalue ASSIGN expression SEMICOLON'''
+    pass
+
+def p_conditional_statement(p):
+    '''conditional_statement : IF LPAREN expression RPAREN statement
+                            | IF LPAREN expression RPAREN statement ELSE statement'''
+    pass
+
+def p_case_statement(p):
+    '''case_statement : CASE LPAREN expression RPAREN case_items ENDCASE'''
     pass
 
 def p_case_items(p):
@@ -419,8 +523,24 @@ def p_case_items(p):
     pass
 
 def p_case_item(p):
-    '''case_item : expression COLON statement
-                | DEFAULT COLON statement'''
+    '''case_item : expression_list COLON statement
+                | DEFAULT COLON statement
+                | DEFAULT statement'''
+    pass
+
+def p_loop_statement(p):
+    '''loop_statement : FOR LPAREN assignment SEMICOLON expression SEMICOLON assignment RPAREN statement
+                     | WHILE LPAREN expression RPAREN statement'''
+    pass
+
+def p_seq_block(p):
+    '''seq_block : BEGIN statement_list END
+                | BEGIN COLON IDENTIFIER statement_list END'''
+    pass
+
+def p_par_block(p):
+    '''par_block : BEGIN statement_list END
+                | BEGIN COLON IDENTIFIER statement_list END'''
     pass
 
 def p_statement_list(p):
@@ -428,41 +548,216 @@ def p_statement_list(p):
                      | statement_list statement'''
     pass
 
+def p_task_enable(p):
+    '''task_enable : IDENTIFIER SEMICOLON
+                  | IDENTIFIER LPAREN expression_list RPAREN SEMICOLON'''
+    pass
+
+def p_system_task_enable(p):
+    '''system_task_enable : IDENTIFIER SEMICOLON
+                         | IDENTIFIER LPAREN expression_list RPAREN SEMICOLON'''
+    pass
+
+def p_disable_statement(p):
+    '''disable_statement : IDENTIFIER SEMICOLON'''
+    pass
+
+def p_event_trigger(p):
+    '''event_trigger : IDENTIFIER SEMICOLON'''
+    pass
+
+def p_delay_or_event_control(p):
+    '''delay_or_event_control : delay_control
+                             | event_control'''
+    pass
+
+def p_delay_control(p):
+    '''delay_control : HASH expression
+                    | HASH LPAREN expression RPAREN'''
+    pass
+
+def p_event_control(p):
+    '''event_control : AT event_expression
+                    | AT LPAREN event_expression RPAREN
+                    | AT MULTIPLY
+                    | AT LPAREN MULTIPLY RPAREN'''
+    pass
+
 def p_expression(p):
-    '''expression : IDENTIFIER
-                 | NUMBER
-                 | STRING_LITERAL
-                 | IDENTIFIER LBRACKET expression RBRACKET
-                 | expression PLUS expression
-                 | expression MINUS expression
-                 | expression MULTIPLY expression
-                 | expression DIVIDE expression
-                 | expression MODULO expression
-                 | expression EQUAL expression
-                 | expression NOT_EQUAL expression
-                 | expression LESS_THAN expression
-                 | expression LESS_EQUAL expression
-                 | expression GREATER_THAN expression
-                 | expression GREATER_EQUAL expression
-                 | expression LOGICAL_AND expression
-                 | expression LOGICAL_OR expression
-                 | expression BITWISE_AND expression
-                 | expression BITWISE_OR expression
-                 | expression BITWISE_XOR expression
-                 | LOGICAL_NOT expression
-                 | BITWISE_NOT expression
-                 | LPAREN expression RPAREN
-                 | concatenation
-                 | expression_list'''
+    '''expression : primary
+                 | unary_expression
+                 | binary_expression
+                 | conditional_expression'''
+    p[0] = p[1]
+
+def p_primary(p):
+    '''primary : NUMBER
+              | IDENTIFIER
+              | IDENTIFIER LBRACKET expression RBRACKET
+              | IDENTIFIER LBRACKET expression COLON expression RBRACKET
+              | concatenation
+              | multiple_concatenation
+              | function_call
+              | system_function_call
+              | LPAREN expression RPAREN
+              | STRING_LITERAL'''
+    p[0] = p[1]
+
+def p_unary_expression(p):
+    '''unary_expression : PLUS expression %prec UPLUS
+                       | MINUS expression %prec UMINUS
+                       | LOGICAL_NOT expression
+                       | BITWISE_NOT expression
+                       | BITWISE_AND expression
+                       | BITWISE_OR expression
+                       | BITWISE_XOR expression'''
+    pass
+
+def p_binary_expression(p):
+    '''binary_expression : expression PLUS expression
+                        | expression MINUS expression
+                        | expression MULTIPLY expression
+                        | expression DIVIDE expression
+                        | expression MODULO expression
+                        | expression EQUAL expression
+                        | expression NOT_EQUAL expression
+                        | expression LESS_THAN expression
+                        | expression NON_BLOCKING_ASSIGN expression
+                        | expression GREATER_THAN expression
+                        | expression GREATER_EQUAL expression
+                        | expression LOGICAL_AND expression
+                        | expression LOGICAL_OR expression
+                        | expression BITWISE_AND expression
+                        | expression BITWISE_OR expression
+                        | expression BITWISE_XOR expression
+                        | expression SHIFT_LEFT expression
+                        | expression SHIFT_RIGHT expression'''
+    pass
+
+def p_conditional_expression(p):
+    '''conditional_expression : expression'''
+    pass
+
+def p_concatenation(p):
+    '''concatenation : LBRACE expression_list RBRACE'''
+    pass
+
+def p_multiple_concatenation(p):
+    '''multiple_concatenation : LBRACE expression LBRACE expression_list RBRACE RBRACE'''
+    pass
+
+def p_function_call(p):
+    '''function_call : IDENTIFIER LPAREN expression_list RPAREN
+                    | IDENTIFIER LPAREN RPAREN'''
+    pass
+
+def p_system_function_call(p):
+    '''system_function_call : IDENTIFIER LPAREN expression_list RPAREN
+                           | IDENTIFIER LPAREN RPAREN'''
     pass
 
 def p_expression_list(p):
     '''expression_list : expression
                       | expression_list COMMA expression'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
+
+def p_module_instantiation(p):
+    '''module_instantiation : IDENTIFIER instance_list SEMICOLON
+                           | IDENTIFIER parameter_value_assignment instance_list SEMICOLON'''
     pass
 
-def p_concatenation(p):
-    '''concatenation : LBRACE expression_list RBRACE'''
+def p_parameter_value_assignment(p):
+    '''parameter_value_assignment : HASH LPAREN expression_list RPAREN'''
+    pass
+
+def p_instance_list(p):
+    '''instance_list : module_instance
+                    | instance_list COMMA module_instance'''
+    pass
+
+def p_module_instance(p):
+    '''module_instance : IDENTIFIER LPAREN port_connections RPAREN
+                      | IDENTIFIER LPAREN RPAREN'''
+    pass
+
+def p_port_connections(p):
+    '''port_connections : port_connection
+                       | port_connections COMMA port_connection'''
+    pass
+
+def p_port_connection(p):
+    '''port_connection : expression
+                      | DOT IDENTIFIER LPAREN expression RPAREN
+                      | DOT IDENTIFIER LPAREN RPAREN'''
+    pass
+
+def p_generate_block(p):
+    '''generate_block : GENERATE generate_items ENDGENERATE'''
+    pass
+
+def p_generate_items(p):
+    '''generate_items : generate_item
+                     | generate_items generate_item'''
+    pass
+
+def p_generate_item(p):
+    '''generate_item : module_item
+                    | generate_conditional
+                    | generate_loop
+                    | generate_block'''
+    pass
+
+def p_generate_conditional(p):
+    '''generate_conditional : IF LPAREN expression RPAREN generate_item
+                           | IF LPAREN expression RPAREN generate_item ELSE generate_item'''
+    pass
+
+def p_generate_loop(p):
+    '''generate_loop : FOR LPAREN assignment SEMICOLON expression SEMICOLON assignment RPAREN generate_item'''
+    pass
+
+def p_function_declaration(p):
+    '''function_declaration : FUNCTION range IDENTIFIER SEMICOLON function_items ENDFUNCTION
+                           | FUNCTION IDENTIFIER SEMICOLON function_items ENDFUNCTION'''
+    pass
+
+def p_function_items(p):
+    '''function_items : function_item
+                     | function_items function_item'''
+    pass
+
+def p_function_item(p):
+    '''function_item : port_declaration
+                    | parameter_declaration
+                    | net_declaration
+                    | reg_declaration
+                    | integer_declaration
+                    | real_declaration
+                    | time_declaration
+                    | statement'''
+    pass
+
+def p_task_declaration(p):
+    '''task_declaration : TASK IDENTIFIER SEMICOLON task_items ENDTASK'''
+    pass
+
+def p_task_items(p):
+    '''task_items : task_item
+                 | task_items task_item'''
+    pass
+
+def p_task_item(p):
+    '''task_item : port_declaration
+                | parameter_declaration
+                | net_declaration
+                | reg_declaration
+                | integer_declaration
+                | real_declaration
+                | time_declaration
+                | statement'''
     pass
 
 def p_error(p):
@@ -483,10 +778,10 @@ def parse_verilog(filename: str, source_text: str, language: str) -> HDLDocument
     try:
         # Build lexer and parser
         lexer = lex.lex()
-        parser = yacc.yacc()
+        parser = yacc.yacc(debug=False)
         
         # Parse the source text
-        result = parser.parse(source_text, lexer=lexer)
+        result = parser.parse(source_text, lexer=lexer, debug=False)
         
         # Set tokens in document
         current_document.tokens = current_tokens
@@ -536,7 +831,7 @@ class VerilogParser(BaseHDLParser):
 
     def _setup_parser(self):
         """Setup Verilog parser"""
-        self.parser = yacc.yacc()
+        self.parser = yacc.yacc(debug=False)
 
     def parse(self, filename: str, source_text: str) -> HDLDocument:
         """Parse Verilog source and return HDLDocument"""
