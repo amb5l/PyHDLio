@@ -4,30 +4,14 @@ PyHDLio is a Python library for parsing VHDL, Verilog, and SystemVerilog files u
 
 ## Features
 
-- **Multi-HDL Support**: VHDL (2008), Verilog, and SystemVerilog parsing
-- **Version Support**: Placeholders for VHDL 2000, 2008, 2019 and various Verilog/SystemVerilog versions
+- **Multi-HDL Support**:
+  - **VHDL**: IEEE 1076 (LRM) versions 1993, 2000, 2008, 2019
+  - **Verilog**: IEEE 1364 (LRM) versions 1995, 2001, 2005
+  - **SystemVerilog**: IEEE 1800 (LRM) versions 2005, 2009, 2012, 2017
 - **100% Source Reconstruction**: Preserves all whitespace, newlines, and formatting
 - **Port Grouping**: Automatically groups ports based on comments and empty lines
 - **Source Order Preservation**: All lists and dictionaries maintain source declaration order
 - **Simple API**: Easy-to-use interface for extracting design units and ports
-
-## Supported Languages
-
-### VHDL
-- VHDL_2000 (placeholder)
-- VHDL_2008 (implemented)
-- VHDL_2019 (placeholder)
-
-### Verilog
-- VERILOG_1995 (placeholder)
-- VERILOG_2001 (placeholder)
-- VERILOG_2005 (placeholder)
-
-### SystemVerilog
-- SYSTEMVERILOG_2005 (placeholder)
-- SYSTEMVERILOG_2009 (placeholder)
-- SYSTEMVERILOG_2012 (placeholder)
-- SYSTEMVERILOG_2017 (placeholder)
 
 ## Installation
 
@@ -74,12 +58,12 @@ entity my_entity is
     -- Clock and Reset group
     clk : in std_logic;
     rst_n : in std_logic;
-    
+
     -- Data group
     data_in : in std_logic_vector(7 downto 0);
     data_out : out std_logic_vector(7 downto 0);
-    
-    -- Control group  
+
+    -- Control group
     enable : in std_logic;
     ready : out std_logic
   );

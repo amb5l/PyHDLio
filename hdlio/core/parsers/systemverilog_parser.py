@@ -64,7 +64,9 @@ tokens = verilog_tokens + (
     'DOLLAR',
     'RAND',
     'VOID',
-    'NEW'
+    'NEW',
+    'RETURN',
+    'COLON_COLON'
 )
 
 # SystemVerilog reserved words (extends Verilog reserved words)
@@ -101,7 +103,8 @@ reserved = dict(verilog_reserved, **{
     'automatic': 'AUTOMATIC',
     'rand': 'RAND',
     'void': 'VOID',
-    'new': 'NEW'
+    'new': 'NEW',
+    'return': 'RETURN'
 })
 
 # Import all token functions from verilog_parser
@@ -121,6 +124,7 @@ from .verilog_parser import (
 t_QUESTION = r'\?'
 t_APOSTROPHE = r"'"
 t_DOLLAR = r'\$'
+t_COLON_COLON = r'::'
 
 
 def t_IDENTIFIER(t):
@@ -208,13 +212,26 @@ def p_package_declaration(p):
 
 def p_module_parameters(p):
     '''module_parameters :
-                        | HASH LPAREN parameter_list RPAREN'''
+                        | HASH LPAREN parameter_list RPAREN
+                        | HASH LPAREN parameter_value_list RPAREN'''
     pass
 
 
 def p_parameter_list(p):
     '''parameter_list : parameter_declaration
                      | parameter_list COMMA parameter_declaration'''
+    pass
+
+
+def p_parameter_value_list(p):
+    '''parameter_value_list : parameter_value
+                           | parameter_value_list COMMA parameter_value'''
+    pass
+
+
+def p_parameter_value(p):
+    '''parameter_value : IDENTIFIER ASSIGN expression
+                      | expression'''
     pass
 
 
@@ -285,9 +302,15 @@ def p_modport_items(p):
 
 
 def p_modport_item(p):
-    '''modport_item : INPUT identifier_list
-                   | OUTPUT identifier_list
-                   | INOUT identifier_list'''
+    '''modport_item : INPUT modport_port_list
+                   | OUTPUT modport_port_list
+                   | INOUT modport_port_list'''
+    pass
+
+
+def p_modport_port_list(p):
+    '''modport_port_list : IDENTIFIER
+                        | modport_port_list COMMA IDENTIFIER'''
     pass
 
 
@@ -395,12 +418,19 @@ def p_task_arg(p):
 
 
 def p_function_body(p):
-    '''function_body : statement_list'''
+    '''function_body : statement_list
+                    | statement_list return_statement'''
     pass
 
 
 def p_task_body(p):
     '''task_body : statement_list'''
+    pass
+
+
+def p_return_statement(p):
+    '''return_statement : RETURN expression SEMICOLON
+                       | RETURN SEMICOLON'''
     pass
 
 
@@ -499,6 +529,7 @@ def p_module_item(p):
     '''module_item : port_declaration
                   | parameter_declaration
                   | signal_declaration
+                  | typedef_declaration
                   | always_block
                   | always_ff_block
                   | always_comb_block
@@ -541,6 +572,7 @@ def p_statement(p):
                 | case_statement
                 | for_loop
                 | while_loop
+                | return_statement
                 | IDENTIFIER SEMICOLON
                 | SEMICOLON'''
     pass
@@ -554,7 +586,9 @@ def p_statement_list(p):
 
 def p_assignment(p):
     '''assignment : IDENTIFIER ASSIGN expression SEMICOLON
-                 | IDENTIFIER NON_BLOCKING_ASSIGN expression SEMICOLON'''
+                 | IDENTIFIER NON_BLOCKING_ASSIGN expression SEMICOLON
+                 | hierarchical_identifier ASSIGN expression SEMICOLON
+                 | hierarchical_identifier NON_BLOCKING_ASSIGN expression SEMICOLON'''
     pass
 
 
@@ -685,7 +719,8 @@ def p_generate_conditional(p):
 
 
 def p_generate_loop(p):
-    '''generate_loop : FOR LPAREN GENVAR IDENTIFIER ASSIGN expression SEMICOLON expression SEMICOLON IDENTIFIER ASSIGN expression RPAREN generate_item'''
+    '''generate_loop : FOR LPAREN GENVAR IDENTIFIER ASSIGN expression SEMICOLON expression SEMICOLON IDENTIFIER ASSIGN expression RPAREN generate_item
+                    | FOR LPAREN IDENTIFIER ASSIGN expression SEMICOLON expression SEMICOLON IDENTIFIER ASSIGN expression RPAREN generate_item'''
     pass
 
 
@@ -705,7 +740,8 @@ def p_primary(p):
               | concatenation
               | function_call
               | system_task_call
-              | fill_pattern'''
+              | fill_pattern
+              | hierarchical_identifier'''
     if len(p) == 2:
         p[0] = p[1]
     else:
@@ -870,3 +906,12 @@ class SystemVerilogParser(BaseHDLParser):
     def parse(self, filename: str, source_text: str) -> HDLDocument:
         """Parse SystemVerilog source code"""
         return parse_systemverilog(filename, source_text, self.language)
+
+
+def p_hierarchical_identifier(p):
+    '''hierarchical_identifier : IDENTIFIER DOT IDENTIFIER
+                              | hierarchical_identifier DOT IDENTIFIER'''
+    if len(p) == 4:
+        p[0] = f"{p[1]}.{p[3]}"
+    else:
+        p[0] = f"{p[1]}.{p[3]}"
