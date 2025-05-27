@@ -12,7 +12,7 @@ class VerilogModule(HDLDesignUnit):
         super().__init__(name)
         self.parameters = []
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "module"
 
     def get_node_type(self) -> str:
@@ -22,7 +22,7 @@ class VerilogModule(HDLDesignUnit):
         """Add a parameter"""
         self.parameters.append(parameter)
 
-    def getParameters(self):
+    def get_parameters(self):
         """Get all parameters"""
         return self.parameters.copy()
 

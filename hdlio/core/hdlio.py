@@ -20,12 +20,12 @@ class HDLio:
         # Comprehensive parsing (handles all VHDL constructs)
         hdl = HDLio("test.vhd", VHDL_2008, comprehensive=True)
         
-        design_units = hdl.getDesignUnits()
+        design_units = hdl.get_design_units()
         for unit in design_units:
-            if unit.getVhdlType() == "entity":
-                port_groups = unit.getPortGroups()
+            if unit.get_vhdl_type() == "entity":
+                port_groups = unit.get_port_groups()
                 for group in port_groups:
-                    ports = group.getPorts()
+                    ports = group.get_ports()
     """
 
     def __init__(self, filename: str, language: str, comprehensive: bool = False):
@@ -67,7 +67,7 @@ class HDLio:
         self.document = parser.parse(self.filename, source_text)
         self._parsed = True
 
-    def getDesignUnits(self) -> List[HDLDesignUnit]:
+    def get_design_units(self) -> List[HDLDesignUnit]:
         """
         Get all design units from the parsed file
 
@@ -77,9 +77,9 @@ class HDLio:
         if not self._parsed or not self.document:
             raise RuntimeError("File has not been parsed successfully")
 
-        return self.document.getDesignUnits()
+        return self.document.get_design_units()
 
-    def getDocument(self) -> HDLDocument:
+    def get_document(self) -> HDLDocument:
         """
         Get the complete document object
 
@@ -91,7 +91,7 @@ class HDLio:
 
         return self.document
 
-    def getSourceText(self) -> str:
+    def get_source_text(self) -> str:
         """
         Get the original source text
 
@@ -103,7 +103,7 @@ class HDLio:
 
         return self.document.source_text
 
-    def getReconstructedText(self) -> str:
+    def get_reconstructed_text(self) -> str:
         """
         Reconstruct the source text from the parsed document
         This should match the original source exactly (100% accuracy)
@@ -116,19 +116,19 @@ class HDLio:
 
         return self.document.get_source_text()
 
-    def getLanguage(self) -> str:
+    def get_language(self) -> str:
         """Get the language version being used"""
         return self.language
 
-    def getFilename(self) -> str:
+    def get_filename(self) -> str:
         """Get the filename being parsed"""
         return self.filename
 
-    def isComprehensive(self) -> bool:
+    def is_comprehensive(self) -> bool:
         """Check if comprehensive parsing mode is enabled"""
         return self.comprehensive
 
-    def getParserInfo(self) -> dict:
+    def get_parser_info(self) -> dict:
         """
         Get information about the parser being used
         

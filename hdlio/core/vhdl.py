@@ -13,7 +13,7 @@ class VHDLEntity(HDLDesignUnit):
         self.generics = []
         self.architecture_names = []
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "entity"
 
     def get_node_type(self) -> str:
@@ -23,7 +23,7 @@ class VHDLEntity(HDLDesignUnit):
         """Add a generic parameter"""
         self.generics.append(generic)
 
-    def getGenerics(self):
+    def get_generics(self):
         """Get all generic parameters"""
         return self.generics.copy()
 
@@ -35,13 +35,13 @@ class VHDLArchitecture(HDLDesignUnit):
         super().__init__(name)
         self.entity_name = entity_name
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "architecture"
 
     def get_node_type(self) -> str:
         return "vhdl_architecture"
 
-    def getEntityName(self) -> str:
+    def get_entity_name(self) -> str:
         return self.entity_name
 
 
@@ -51,7 +51,7 @@ class VHDLPackage(HDLDesignUnit):
     def __init__(self, name: str):
         super().__init__(name)
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "package"
 
     def get_node_type(self) -> str:
@@ -64,7 +64,7 @@ class VHDLPackageBody(HDLDesignUnit):
     def __init__(self, name: str):
         super().__init__(name)
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "package_body"
 
     def get_node_type(self) -> str:
@@ -77,7 +77,7 @@ class VHDLConfiguration(HDLDesignUnit):
     def __init__(self, name: str):
         super().__init__(name)
 
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "configuration"
 
     def get_node_type(self) -> str:

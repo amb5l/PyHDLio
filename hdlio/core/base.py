@@ -79,12 +79,12 @@ class HDLDesignUnit(HDLNode):
         """Add a port group to this design unit"""
         self.port_groups.append(port_group)
 
-    def getPortGroups(self) -> List['HDLPortGroup']:
+    def get_port_groups(self) -> List['HDLPortGroup']:
         """Get all port groups in source order"""
         return self.port_groups.copy()
 
     @abstractmethod
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         """Return the VHDL/Verilog type (entity, module, etc.)"""
         pass
 
@@ -103,13 +103,13 @@ class HDLPort(HDLNode):
     def get_node_type(self) -> str:
         return "port"
 
-    def getName(self) -> str:
+    def get_name(self) -> str:
         return self.name
 
-    def getType(self) -> str:
+    def get_type(self) -> str:
         return self.port_type
 
-    def getDirection(self) -> str:
+    def get_direction(self) -> str:
         return self.direction
 
     def __str__(self):
@@ -130,11 +130,11 @@ class HDLPortGroup(HDLNode):
         self.ports.append(port)
         self.add_child(port)
 
-    def getPorts(self) -> List[HDLPort]:
+    def get_ports(self) -> List[HDLPort]:
         """Get all ports in this group in source order"""
         return self.ports.copy()
 
-    def getName(self) -> str:
+    def get_name(self) -> str:
         return self.name
 
     def get_node_type(self) -> str:
@@ -162,7 +162,7 @@ class HDLDocument(HDLNode):
         self.design_units.append(unit)
         self.add_child(unit)
 
-    def getDesignUnits(self) -> List[HDLDesignUnit]:
+    def get_design_units(self) -> List[HDLDesignUnit]:
         """Get all design units in source order"""
         return self.design_units.copy()
 

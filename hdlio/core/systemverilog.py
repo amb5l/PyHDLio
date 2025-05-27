@@ -13,7 +13,7 @@ class SystemVerilogModule(VerilogModule):
         self.interfaces = []
         self.modports = []
     
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "module"
     
     def get_node_type(self) -> str:
@@ -23,7 +23,7 @@ class SystemVerilogModule(VerilogModule):
         """Add an interface"""
         self.interfaces.append(interface)
     
-    def getInterfaces(self):
+    def get_interfaces(self):
         """Get all interfaces"""
         return self.interfaces.copy()
 
@@ -35,7 +35,7 @@ class SystemVerilogInterface(VerilogModule):
         super().__init__(name)
         self.modports = []
     
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "interface"
     
     def get_node_type(self) -> str:
@@ -48,7 +48,7 @@ class SystemVerilogPackage(VerilogModule):
     def __init__(self, name: str):
         super().__init__(name)
     
-    def getVhdlType(self) -> str:
+    def get_vhdl_type(self) -> str:
         return "package"
     
     def get_node_type(self) -> str:

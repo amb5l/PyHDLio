@@ -1370,7 +1370,7 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
         # Check if this line contains a port declaration
         port_found = False
         for port in ports:
-            port_name = port.getName()
+            port_name = port.get_name()
             if port_name in stripped_line and ':' in stripped_line:
                 # This line contains a port declaration
                 port_found = True
@@ -1385,7 +1385,7 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
                 # Find or create the group
                 group = None
                 for g in groups:
-                    if g.getName() == group_name:
+                    if g.get_name() == group_name:
                         group = g
                         break
 
@@ -1410,12 +1410,12 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
             # and haven't assigned any ports to it yet
             if current_group_name and not current_group_name.startswith("group"):
                 # Check if we've already used this group name
-                group_used = any(g.getName() == current_group_name for g in groups)
+                group_used = any(g.get_name() == current_group_name for g in groups)
                 if group_used:
                     current_group_name = None
 
     # Handle any ports that weren't assigned to groups
-    unassigned_ports = [port for port in ports if port.getName() not in port_to_group_map]
+    unassigned_ports = [port for port in ports if port.get_name() not in port_to_group_map]
 
     if unassigned_ports:
         # If we have comment groups but unassigned ports, try to assign them to the last comment group
@@ -1425,7 +1425,7 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
             last_group = groups[-1]
             for port in unassigned_ports:
                 last_group.add_port(port)
-                # print(f"Added unassigned port '{port.getName()}' to group '{last_group.getName()}'")  # Debug: commented out
+                # print(f"Added unassigned port '{port.get_name()}' to group '{last_group.get_name()}'")  # Debug: commented out
         else:
             # Create a default group for unassigned ports
             if not groups:
@@ -1438,7 +1438,7 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
 
             for port in unassigned_ports:
                 default_group.add_port(port)
-                # print(f"Added unassigned port '{port.getName()}' to group '{default_group.getName()}'")  # Debug: commented out
+                # print(f"Added unassigned port '{port.get_name()}' to group '{default_group.get_name()}'")  # Debug: commented out
 
     # If no groups were created, create a default one
     if not groups:
