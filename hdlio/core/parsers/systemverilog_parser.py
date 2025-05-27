@@ -3,12 +3,8 @@ SystemVerilog Parser implementation using PLY
 (Extends Verilog parser with SystemVerilog-specific features)
 """
 
-from typing import List, Dict, Any, Optional
 from .verilog_parser import VerilogParser
 from ..systemverilog import SystemVerilogModule, SystemVerilogInterface, SystemVerilogPackage, SystemVerilogPort
-from ..base import HDLToken, HDLPortGroup
-
-import ply.lex as lex
 import ply.yacc as yacc
 
 

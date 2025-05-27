@@ -5,7 +5,7 @@ Verilog Parser implementation using PLY
 
 import sys
 import os
-from typing import List, Dict, Any, Optional
+
 
 # Add PLY to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))

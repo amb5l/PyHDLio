@@ -5,7 +5,7 @@ Base parser class for all HDL parsers
 import sys
 import os
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List
 
 # Add PLY to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,10 +15,7 @@ ply_path = os.path.normpath(ply_path)
 if ply_path not in sys.path:
     sys.path.insert(0, ply_path)
 
-import ply.lex as lex
-import ply.yacc as yacc
-
-from ..base import HDLDocument, HDLDesignUnit, HDLPort, HDLPortGroup, HDLToken
+from ..base import HDLDocument, HDLPort, HDLPortGroup, HDLToken
 
 
 class BaseHDLParser(ABC):

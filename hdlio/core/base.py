@@ -2,7 +2,7 @@
 Base classes for HDL document object model
 """
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Optional
 from abc import ABC, abstractmethod
 
 

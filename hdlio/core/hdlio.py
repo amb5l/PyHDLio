@@ -3,7 +3,7 @@ Main HDLio class providing the user interface for HDL parsing
 """
 
 import os
-from typing import List, Optional, Union
+from typing import List, Optional
 from .constants import *
 from .base import HDLDocument, HDLDesignUnit
 from .parsers.parser_factory import ParserFactory
