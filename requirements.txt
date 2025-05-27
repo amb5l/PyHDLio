@@ -1,0 +1,10 @@
+# HDLio Requirements
+# 
+# This project uses PLY (Python Lex-Yacc) which is included as a git submodule
+# No external dependencies are required for basic functionality
+#
+# For development and testing:
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=21.0.0
+flake8>=3.8.0 

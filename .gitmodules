@@ -1,0 +1,3 @@
+[submodule "hdlio/submodules/ply"]
+	path = hdlio/submodules/ply
+	url = https://github.com/dabeaz/ply.git
