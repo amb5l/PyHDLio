@@ -266,10 +266,10 @@ def p_module_declaration(p):
                          | MODULE IDENTIFIER LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER SEMICOLON module_items ENDMODULE'''
     global current_document, current_tokens
-    
+
     module_name = p[2]
     module = VerilogModule(module_name)
-    
+
     # Extract ports if they exist
     if len(p) == 10:  # Module with parameters and ports
         if p[5]:  # port_list exists
@@ -281,12 +281,12 @@ def p_module_declaration(p):
             port_groups = extract_port_groups(p[4], current_tokens)
             for group in port_groups:
                 module.add_port_group(group)
-    
+
     if current_document:
         current_document.add_design_unit(module)
 
 def p_parameter_port_list(p):
-    '''parameter_port_list : 
+    '''parameter_port_list :
                           | HASH LPAREN parameter_list RPAREN'''
     pass
 
@@ -296,7 +296,7 @@ def p_parameter_list(p):
     pass
 
 def p_port_list(p):
-    '''port_list : 
+    '''port_list :
                 | port_list_items'''
     if len(p) == 2:
         p[0] = p[1] if p[1] else []
@@ -324,7 +324,7 @@ def p_port(p):
            | INPUT IDENTIFIER
            | OUTPUT IDENTIFIER
            | INOUT IDENTIFIER'''
-    
+
     # Extract port information
     if len(p) == 2:  # Just identifier
         p[0] = {'name': p[1], 'direction': None, 'type': None, 'range': None}
@@ -341,7 +341,7 @@ def p_net_type(p):
     p[0] = p[1]
 
 def p_module_items(p):
-    '''module_items : 
+    '''module_items :
                    | module_items module_item'''
     pass
 
@@ -415,7 +415,7 @@ def p_identifier_list(p):
     pass
 
 def p_range(p):
-    '''range : 
+    '''range :
             | LBRACKET expression COLON expression RBRACKET'''
     if len(p) == 1:
         p[0] = None
@@ -769,25 +769,25 @@ def p_error(p):
 def parse_verilog(filename: str, source_text: str, language: str) -> HDLDocument:
     """Parse Verilog source text and return HDLDocument"""
     global current_document, current_tokens, current_modules
-    
+
     # Initialize global state
     current_document = HDLDocument(filename, language)
     current_tokens = []
     current_modules = []
-    
+
     try:
         # Build lexer and parser
         lexer = lex.lex()
         parser = yacc.yacc(debug=False)
-        
+
         # Parse the source text
         result = parser.parse(source_text, lexer=lexer, debug=False)
-        
+
         # Set tokens in document
         current_document.tokens = current_tokens
-        
+
         return current_document
-        
+
     except Exception as e:
         print(f"Error parsing Verilog: {e}")
         return current_document
@@ -796,26 +796,26 @@ def extract_port_groups(port_list, tokens):
     """Extract port groups from parsed port list"""
     if not port_list:
         return []
-    
+
     groups = {}
-    
+
     for port_info in port_list:
         if isinstance(port_info, dict):
             direction = port_info.get('direction', 'input')
             port_name = port_info.get('name', 'unknown')
             port_type = port_info.get('type', 'wire')
             port_range = port_info.get('range', '')
-            
+
             # Create port
             port = VerilogPort(port_name, direction, port_type)
             if port_range:
                 port.range = port_range
-            
+
             # Group by direction
             if direction not in groups:
                 groups[direction] = HDLPortGroup(direction)
             groups[direction].add_port(port)
-    
+
     return list(groups.values())
 
 

@@ -16,10 +16,9 @@ class HDLio:
     Usage:
         # Entity-focused parsing (optimized, default)
         hdl = HDLio("test.vhd", VHDL_2008)
-        
+
         # Comprehensive parsing (handles all VHDL constructs)
         hdl = HDLio("test.vhd", VHDL_2008, comprehensive=True)
-        
         design_units = hdl.get_design_units()
         for unit in design_units:
             if unit.get_vhdl_type() == "entity":
@@ -131,7 +130,7 @@ class HDLio:
     def get_parser_info(self) -> dict:
         """
         Get information about the parser being used
-        
+
         Returns:
             Dictionary with parser information
         """

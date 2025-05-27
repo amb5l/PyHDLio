@@ -26,7 +26,7 @@ class ParserFactory:
             Parser instance for the language
         """
         parser_key = f"{language}_{'comprehensive' if comprehensive else 'working'}"
-        
+
         if parser_key not in cls._parsers:
             cls._parsers[parser_key] = cls._create_parser(language, comprehensive)
 
@@ -57,7 +57,7 @@ class ParserFactory:
     def set_comprehensive_mode(cls, enabled: bool):
         """
         Set the default comprehensive parsing mode
-        
+
         Args:
             enabled: If True, use comprehensive parsing by default
         """
