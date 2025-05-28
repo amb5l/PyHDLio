@@ -1638,7 +1638,3 @@ class VHDLParser:
 
     def parse(self, filename: str, source_text: str) -> HDLDocument:
         return parse_vhdl(filename, source_text, self.language)
-
-# Legacy aliases for backward compatibility
-UnifiedVHDLParser = VHDLParser
-WorkingVHDLParser = VHDLParser
