@@ -67,6 +67,8 @@ tokens = (
     'NON_BLOCKING_ASSIGN',
     'AT',
     'HASH',
+    'QUESTION',        # Added for ternary operator
+    'COLON_COLON',     # Added for package scope resolution
 
     # Verilog Keywords
     'MODULE',
@@ -102,7 +104,12 @@ tokens = (
     'INTEGER',
     'REAL',
     'TIME',
-    'REALTIME'
+    'REALTIME',
+    'PACKAGE',         # Added for package support
+    'ENDPACKAGE',      # Added for package support
+    'IMPORT',          # Added for import support
+    'AUTOMATIC',       # Added for automatic functions/tasks
+    'GENVAR'           # Added for generate variables
 )
 
 # Verilog reserved words
@@ -140,11 +147,17 @@ reserved = {
     'integer': 'INTEGER',
     'real': 'REAL',
     'time': 'TIME',
-    'realtime': 'REALTIME'
+    'realtime': 'REALTIME',
+    'package': 'PACKAGE',        # Added for package support
+    'endpackage': 'ENDPACKAGE',  # Added for package support
+    'import': 'IMPORT',          # Added for import support
+    'automatic': 'AUTOMATIC',    # Added for automatic functions/tasks
+    'genvar': 'GENVAR',          # Added for generate variables
 }
 
 # Token rules
 t_SEMICOLON = r';'
+t_COLON_COLON = r'::'      # Added for package scope resolution (must come before single colon)
 t_COLON = r':'
 t_COMMA = r','
 t_DOT = r'\.'
@@ -178,6 +191,7 @@ t_BITWISE_OR = r'\|'
 t_BITWISE_XOR = r'\^'
 t_BITWISE_NOT = r'~'
 t_LOGICAL_NOT = r'!'
+t_QUESTION = r'\?'        # Added for ternary operator
 
 
 def t_NON_BLOCKING_ASSIGN(t):
@@ -185,6 +199,43 @@ def t_NON_BLOCKING_ASSIGN(t):
     return t
 
 # NON_BLOCKING_ASSIGN (<= ) is used for both assignments and comparisons
+
+
+def t_BACKTICK_DEFINE(t):
+    r'`define\s+[a-zA-Z_][a-zA-Z_0-9]*.*'
+    # Handle define directive - for now, just ignore it
+    global current_tokens
+    current_tokens.append(
+        HDLToken('DEFINE', t.value, t.lineno, find_column(t))
+    )
+    return None  # Don't return token to parser
+
+
+def t_BACKTICK_INCLUDE(t):
+    r'`include\s+"[^"]*"'
+    # Handle include directive - for now, just ignore it
+    global current_tokens
+    current_tokens.append(
+        HDLToken('INCLUDE', t.value, t.lineno, find_column(t))
+    )
+    return None  # Don't return token to parser
+
+
+def t_BACKTICK_IDENTIFIER(t):
+    r'`[a-zA-Z_][a-zA-Z_0-9]*'
+    # Handle backtick identifiers (macro usage)
+    # For now, treat them as regular identifiers for parsing
+    t.type = 'IDENTIFIER'
+    t.value = t.value  # Keep the backtick for now
+    return t
+
+
+def t_SYSTEM_TASK(t):
+    r'\$[a-zA-Z_][a-zA-Z_0-9]*'
+    # Handle system tasks like $finish, $display, etc.
+    t.type = 'IDENTIFIER'
+    return t
+
 
 # Ignored characters
 t_ignore = ' \t'
@@ -271,6 +322,8 @@ def p_description_list(p):
 
 def p_description(p):
     '''description : module_declaration
+                  | package_declaration
+                  | import_statement
                   | comment_or_empty'''
     pass
 
@@ -278,23 +331,31 @@ def p_description(p):
 def p_module_declaration(p):
     '''module_declaration : MODULE IDENTIFIER parameter_port_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
-                         | MODULE IDENTIFIER SEMICOLON module_items ENDMODULE'''
+                         | MODULE IDENTIFIER SEMICOLON module_items ENDMODULE
+                         | MODULE IDENTIFIER import_list parameter_port_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
+                         | MODULE IDENTIFIER import_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
+                         | MODULE IDENTIFIER import_list SEMICOLON module_items ENDMODULE'''
     global current_document, current_tokens
 
+    # Find module name - it's always at index 2
     module_name = p[2]
     module = VerilogModule(module_name)
 
-    # Extract ports if they exist
+    # Extract ports if they exist - need to handle different rule lengths
+    port_list = None
     if len(p) == 10:  # Module with parameters and ports
-        if p[5]:  # port_list exists
-            port_groups = extract_port_groups(p[5], current_tokens)
-            for group in port_groups:
-                module.add_port_group(group)
+        port_list = p[5]
     elif len(p) == 9:  # Module with ports only
-        if p[4]:  # port_list exists
-            port_groups = extract_port_groups(p[4], current_tokens)
-            for group in port_groups:
-                module.add_port_group(group)
+        port_list = p[4]
+    elif len(p) == 11:  # Module with import, parameters and ports
+        port_list = p[6]
+    elif len(p) == 10:  # Module with import and ports only
+        port_list = p[5]
+
+    if port_list:
+        port_groups = extract_port_groups(port_list, current_tokens)
+        for group in port_groups:
+            module.add_port_group(group)
 
     if current_document:
         current_document.add_design_unit(module)
@@ -376,6 +437,7 @@ def p_module_item(p):
                   | integer_declaration
                   | real_declaration
                   | time_declaration
+                  | genvar_declaration
                   | always_block
                   | initial_block
                   | assign_statement
@@ -480,7 +542,8 @@ def p_parameter_assignment(p):
 
 def p_always_block(p):
     '''always_block : ALWAYS statement
-                   | ALWAYS AT LPAREN event_expression RPAREN statement'''
+                   | ALWAYS AT LPAREN event_expression RPAREN statement
+                   | ALWAYS AT MULTIPLY statement'''
     pass
 
 
@@ -702,8 +765,13 @@ def p_binary_expression(p):
 
 
 def p_conditional_expression(p):
-    '''conditional_expression : expression'''
-    pass
+    '''conditional_expression : expression
+                             | expression QUESTION expression COLON expression'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        # Ternary operator: condition ? true_expr : false_expr
+        p[0] = {'type': 'ternary', 'condition': p[1], 'true_expr': p[3], 'false_expr': p[5]}
 
 
 def p_concatenation(p):
@@ -805,7 +873,9 @@ def p_generate_loop(p):
 
 def p_function_declaration(p):
     '''function_declaration : FUNCTION range IDENTIFIER SEMICOLON function_items ENDFUNCTION
-                           | FUNCTION IDENTIFIER SEMICOLON function_items ENDFUNCTION'''
+                           | FUNCTION IDENTIFIER SEMICOLON function_items ENDFUNCTION
+                           | FUNCTION AUTOMATIC range IDENTIFIER SEMICOLON function_items ENDFUNCTION
+                           | FUNCTION AUTOMATIC IDENTIFIER SEMICOLON function_items ENDFUNCTION'''
     pass
 
 
@@ -828,7 +898,8 @@ def p_function_item(p):
 
 
 def p_task_declaration(p):
-    '''task_declaration : TASK IDENTIFIER SEMICOLON task_items ENDTASK'''
+    '''task_declaration : TASK IDENTIFIER SEMICOLON task_items ENDTASK
+                       | TASK AUTOMATIC IDENTIFIER SEMICOLON task_items ENDTASK'''
     pass
 
 
@@ -847,6 +918,44 @@ def p_task_item(p):
                 | real_declaration
                 | time_declaration
                 | statement'''
+    pass
+
+
+def p_package_declaration(p):
+    '''package_declaration : PACKAGE IDENTIFIER SEMICOLON package_items ENDPACKAGE
+                          | PACKAGE IDENTIFIER SEMICOLON ENDPACKAGE'''
+    pass
+
+
+def p_package_items(p):
+    '''package_items : package_item
+                    | package_items package_item'''
+    pass
+
+
+def p_package_item(p):
+    '''package_item : parameter_declaration
+                   | localparam_declaration
+                   | function_declaration
+                   | task_declaration
+                   | comment_or_empty'''
+    pass
+
+
+def p_import_statement(p):
+    '''import_statement : IMPORT IDENTIFIER COLON_COLON IDENTIFIER SEMICOLON
+                       | IMPORT IDENTIFIER COLON_COLON MULTIPLY SEMICOLON'''
+    pass
+
+
+def p_import_list(p):
+    '''import_list : import_statement
+                  | import_list import_statement'''
+    pass
+
+
+def p_genvar_declaration(p):
+    '''genvar_declaration : GENVAR identifier_list SEMICOLON'''
     pass
 
 
@@ -927,4 +1036,4 @@ class VerilogParser(BaseHDLParser):
 
     def parse(self, filename: str, source_text: str) -> HDLDocument:
         """Parse Verilog source and return HDLDocument"""
-        return parse_verilog(filename, source_text, self.language)
+        return parse_verilog(filename, source_text, self.language) 
