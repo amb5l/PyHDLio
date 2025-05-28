@@ -3,141 +3,133 @@ Main HDLio class providing the user interface for HDL parsing
 """
 
 import os
-from typing import List, Optional
-from .constants import *
-from .base import HDLDocument, HDLDesignUnit
+from typing import List, Optional, Dict
+from .constants import HDL_LRM
+from .base import HDLLibrary, HDLDesignUnit
 from .parsers.parser_factory import ParserFactory
 
 
 class HDLio:
     """
-    Main HDLio class for parsing HDL files
+    Main HDLio class for parsing HDL files and managing libraries
 
     Usage:
-        # Entity-focused parsing (optimized, default)
-        hdl = HDLio("test.vhd", VHDL_2008)
-
-        # Comprehensive parsing (handles all VHDL constructs)
-        hdl = HDLio("test.vhd", VHDL_2008, comprehensive=True)
-        design_units = hdl.get_design_units()
-        for unit in design_units:
-            if unit.get_vhdl_type() == "entity":
-                port_groups = unit.get_port_groups()
-                for group in port_groups:
-                    ports = group.get_ports()
+        hdlio = HDLio()
+        path = "./example.vhd"
+        library = "work"
+        lrm = HDL_LRM.VHDL_2008
+        source = hdlio.load(path, library, lrm)
+        # source is the fully expanded path to the loaded source, or None if loading fails
     """
 
-    def __init__(self, filename: str, language: str, comprehensive: bool = False):
+    def __init__(self):
+        """Initialize HDLio with empty library collection"""
+        self.libraries: Dict[str, HDLLibrary] = {}
+
+    def load(
+        self,
+        path: str,
+        library: str = "work",
+        hdl_lrm: HDL_LRM = HDL_LRM.VHDL_2008
+    ) -> Optional[str]:
         """
-        Initialize HDLio with a file and language specification
+        Load an HDL source file into the specified library
 
         Args:
-            filename: Path to the HDL file to parse
-            language: Language version constant (e.g., VHDL_2008, VERILOG_2001)
-            comprehensive: If True, use comprehensive parser that handles all language constructs.
-                          If False (default), use optimized parser focused on entity/port parsing.
+            path: Path to the HDL file to load
+            library: Library name to load into (default: "work")
+            hdl_lrm: HDL Language Reference Manual version to use for parsing
+
+        Returns:
+            Fully expanded path to the loaded source file, or None if loading fails
         """
-        if language not in ALL_LANGUAGES:
-            raise ValueError(f"Unsupported language: {language}. "
-                           f"Supported languages: {', '.join(ALL_LANGUAGES)}")
+        try:
+            print(f"DEBUG HDLio.load: Starting load of {path} with {hdl_lrm}")
+            
+            # Expand the path to absolute
+            abs_path = os.path.abspath(path)
+            print(f"DEBUG HDLio.load: Absolute path: {abs_path}")
 
-        self.filename = filename
-        self.language = language
-        self.comprehensive = comprehensive
-        self.document: Optional[HDLDocument] = None
-        self._parsed = False
+            if not os.path.exists(abs_path):
+                print(f"DEBUG HDLio.load: File does not exist: {abs_path}")
+                return None
 
-        # Parse the file immediately
-        self._parse_file()
+            # Read the source file
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                source_text = f.read()
+            print(f"DEBUG HDLio.load: Read {len(source_text)} characters from file")
 
-    def _parse_file(self):
-        """Parse the HDL file using the appropriate parser"""
-        if not os.path.exists(self.filename):
-            raise FileNotFoundError(f"File not found: {self.filename}")
+            # Get the appropriate parser - ParserFactory will handle validation
+            print(f"DEBUG HDLio.load: Getting parser for {hdl_lrm}")
+            parser = ParserFactory.get_parser(hdl_lrm, comprehensive=True)
+            print(f"DEBUG HDLio.load: Got parser: {type(parser).__name__}")
 
-        # Read the source file
-        with open(self.filename, 'r', encoding='utf-8') as f:
-            source_text = f.read()
+            # Parse the file into a library
+            print(f"DEBUG HDLio.load: Starting parse...")
+            parsed_library = parser.parse(abs_path, source_text, library)
+            print(f"DEBUG HDLio.load: Parse completed. Library: {parsed_library}")
 
-        # Get the appropriate parser
-        parser = ParserFactory.get_parser(self.language, self.comprehensive)
+            if parsed_library:
+                print(f"DEBUG HDLio.load: Design units in parsed library: {len(parsed_library.get_design_units())}")
+            else:
+                print(f"DEBUG HDLio.load: No library returned from parser")
 
-        # Parse the file
-        self.document = parser.parse(self.filename, source_text)
-        self._parsed = True
+            # Check if parsing actually produced any design units
+            if not parsed_library or len(parsed_library.get_design_units()) == 0:
+                # No design units found - likely a parse error or empty file
+                print(f"DEBUG HDLio.load: No design units found, returning None")
+                return None
 
-    def get_design_units(self) -> List[HDLDesignUnit]:
+            # Add or merge with existing library
+            if library in self.libraries:
+                # Merge design units into existing library
+                existing_library = self.libraries[library]
+                for unit in parsed_library.get_design_units():
+                    existing_library.add_design_unit(unit)
+                print(f"DEBUG HDLio.load: Merged into existing library '{library}'")
+            else:
+                # Create new library
+                self.libraries[library] = parsed_library
+                print(f"DEBUG HDLio.load: Created new library '{library}'")
+
+            print(f"DEBUG HDLio.load: Success, returning {abs_path}")
+            return abs_path
+
+        except Exception as e:
+            # Log error if needed, but return None to indicate failure
+            print(f"DEBUG HDLio.load: Exception occurred: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def get_libraries(self) -> Dict[str, HDLLibrary]:
+        """Get all loaded libraries"""
+        return self.libraries.copy()
+
+    def get_library(self, name: str) -> Optional[HDLLibrary]:
+        """Get a specific library by name"""
+        return self.libraries.get(name)
+
+    def get_design_units(self, library: str = "work") -> List[HDLDesignUnit]:
         """
-        Get all design units from the parsed file
+        Get all design units from the specified library
+
+        Args:
+            library: Library name (default: "work")
 
         Returns:
             List of HDLDesignUnit objects in source order
         """
-        if not self._parsed or not self.document:
-            raise RuntimeError("File has not been parsed successfully")
+        if library not in self.libraries:
+            return []
 
-        return self.document.get_design_units()
+        return self.libraries[library].get_design_units()
 
-    def get_document(self) -> HDLDocument:
-        """
-        Get the complete document object
+    def clear_library(self, library: str):
+        """Clear all design units from the specified library"""
+        if library in self.libraries:
+            del self.libraries[library]
 
-        Returns:
-            HDLDocument object containing the entire parsed structure
-        """
-        if not self._parsed or not self.document:
-            raise RuntimeError("File has not been parsed successfully")
-
-        return self.document
-
-    def get_source_text(self) -> str:
-        """
-        Get the original source text
-
-        Returns:
-            Original source text as string
-        """
-        if not self._parsed or not self.document:
-            raise RuntimeError("File has not been parsed successfully")
-
-        return self.document.source_text
-
-    def get_reconstructed_text(self) -> str:
-        """
-        Reconstruct the source text from the parsed document
-        This should match the original source exactly (100% accuracy)
-
-        Returns:
-            Reconstructed source text
-        """
-        if not self._parsed or not self.document:
-            raise RuntimeError("File has not been parsed successfully")
-
-        return self.document.get_source_text()
-
-    def get_language(self) -> str:
-        """Get the language version being used"""
-        return self.language
-
-    def get_filename(self) -> str:
-        """Get the filename being parsed"""
-        return self.filename
-
-    def is_comprehensive(self) -> bool:
-        """Check if comprehensive parsing mode is enabled"""
-        return self.comprehensive
-
-    def get_parser_info(self) -> dict:
-        """
-        Get information about the parser being used
-
-        Returns:
-            Dictionary with parser information
-        """
-        return {
-            'filename': self.filename,
-            'language': self.language,
-            'comprehensive': self.comprehensive,
-            'parsed': self._parsed,
-            'parser_type': 'comprehensive' if self.comprehensive else 'entity-focused'
-        }
+    def clear_all_libraries(self):
+        """Clear all libraries"""
+        self.libraries.clear()

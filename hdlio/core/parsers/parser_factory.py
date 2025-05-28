@@ -13,45 +13,45 @@ class ParserFactory:
     _comprehensive_mode = False
 
     @classmethod
-    def get_parser(cls, language: str, comprehensive: bool = False) -> BaseHDLParser:
+    def get_parser(cls, hdl_lrm: HDL_LRM, comprehensive: bool = False) -> BaseHDLParser:
         """
-        Get the appropriate parser for the given language
+        Get the appropriate parser for the given HDL language version
 
         Args:
-            language: Language version constant
+            hdl_lrm: HDL Language Reference Manual version enum
             comprehensive: If True, use comprehensive parser that handles all language constructs.
                          If False, use optimized parser focused on entity/port parsing.
 
         Returns:
             Parser instance for the language
         """
-        parser_key = f"{language}_{'comprehensive' if comprehensive else 'working'}"
+        parser_key = f"{hdl_lrm.value}_{'comprehensive' if comprehensive else 'working'}"
 
         if parser_key not in cls._parsers:
-            cls._parsers[parser_key] = cls._create_parser(language, comprehensive)
+            cls._parsers[parser_key] = cls._create_parser(hdl_lrm, comprehensive)
 
         return cls._parsers[parser_key]
 
     @classmethod
-    def _create_parser(cls, language: str, comprehensive: bool = False) -> BaseHDLParser:
-        """Create a new parser instance for the given language"""
+    def _create_parser(cls, hdl_lrm: HDL_LRM, comprehensive: bool = False) -> BaseHDLParser:
+        """Create a new parser instance for the given HDL language version"""
 
-        if language in VHDL_LANGUAGES:
+        if hdl_lrm in VHDL_VERSIONS:
             # Use the single VHDL parser for all VHDL parsing needs
             # It supports both entity-focused and comprehensive parsing
             from .vhdl_parser import VHDLParser
-            return VHDLParser(language)
+            return VHDLParser(hdl_lrm)
 
-        elif language in VERILOG_LANGUAGES:
+        elif hdl_lrm in VERILOG_VERSIONS:
             from .verilog_parser import VerilogParser
-            return VerilogParser(language)
+            return VerilogParser(hdl_lrm)
 
-        elif language in SYSTEMVERILOG_LANGUAGES:
+        elif hdl_lrm in SYSTEMVERILOG_VERSIONS:
             from .systemverilog_parser import SystemVerilogParser
-            return SystemVerilogParser(language)
+            return SystemVerilogParser(hdl_lrm)
 
         else:
-            raise ValueError(f"Unsupported language: {language}")
+            raise ValueError(f"Unsupported HDL LRM: {hdl_lrm}")
 
     @classmethod
     def set_comprehensive_mode(cls, enabled: bool):

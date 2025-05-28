@@ -74,6 +74,7 @@ class HDLDesignUnit(HDLNode):
         super().__init__()
         self.name = name
         self.port_groups: List['HDLPortGroup'] = []
+        self.source: Optional[str] = None  # Source file path
 
     def add_port_group(self, port_group: 'HDLPortGroup'):
         """Add a port group to this design unit"""
@@ -82,6 +83,14 @@ class HDLDesignUnit(HDLNode):
     def get_port_groups(self) -> List['HDLPortGroup']:
         """Get all port groups in source order"""
         return self.port_groups.copy()
+
+    def set_source(self, source_path: str):
+        """Set the source file path for this design unit"""
+        self.source = source_path
+
+    def get_source(self) -> Optional[str]:
+        """Get the source file path for this design unit"""
+        return self.source
 
     @abstractmethod
     def get_vhdl_type(self) -> str:
@@ -147,18 +156,17 @@ class HDLPortGroup(HDLNode):
             return f"PortGroup ({len(self.ports)} ports)"
 
 
-class HDLDocument(HDLNode):
-    """Root document containing all design units"""
+class HDLLibrary(HDLNode):
+    """HDL library containing design units"""
 
-    def __init__(self, filename: str, language: str):
+    def __init__(self, name: str, language: str):
         super().__init__()
-        self.filename = filename
+        self.name = name
         self.language = language
         self.design_units: List[HDLDesignUnit] = []
-        self.source_text: str = ""
 
     def add_design_unit(self, unit: HDLDesignUnit):
-        """Add a design unit to the document"""
+        """Add a design unit to the library"""
         self.design_units.append(unit)
         self.add_child(unit)
 
@@ -167,8 +175,8 @@ class HDLDocument(HDLNode):
         return self.design_units.copy()
 
     def get_node_type(self) -> str:
-        return "document"
+        return "library"
 
-    def set_source_text(self, text: str):
-        """Store the original source text for reference"""
-        self.source_text = text
+    def get_name(self) -> str:
+        """Get the library name"""
+        return self.name

@@ -1,11 +1,11 @@
 """
-Base parser class for all HDL parsers
+Base HDL Parser class providing common functionality for all HDL parsers
 """
 
 import sys
 import os
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 # Add PLY to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,18 +15,22 @@ ply_path = os.path.normpath(ply_path)
 if ply_path not in sys.path:
     sys.path.insert(0, ply_path)
 
-from ..base import HDLDocument, HDLPort, HDLPortGroup, HDLToken
+from ..base import HDLLibrary, HDLPort, HDLPortGroup, HDLToken
+from ..constants import HDL_LRM
 
 
 class BaseHDLParser(ABC):
     """Base class for all HDL parsers"""
 
-    def __init__(self, language: str):
-        self.language = language
+    def __init__(self, hdl_lrm: HDL_LRM):
+        """Initialize parser with HDL language reference manual version"""
+        self.hdl_lrm = hdl_lrm
+        self.language = hdl_lrm.value if hasattr(hdl_lrm, 'value') else str(hdl_lrm)
         self.tokens = []
         self.lexer = None
         self.parser = None
-        self.current_document = None
+        self.current_library = None
+        self.current_source_path = None  # Track current source file for design units
         self.current_line = 1
         self.current_column = 1
         self._setup_lexer()
@@ -42,20 +46,11 @@ class BaseHDLParser(ABC):
         """Setup the parser for this HDL language"""
         pass
 
-    def parse(self, filename: str, source_text: str) -> HDLDocument:
-        """
-        Parse HDL source text into a document object
-
-        Args:
-            filename: Name of the file being parsed
-            source_text: The source code to parse
-
-        Returns:
-            HDLDocument object representing the parsed structure
-        """
-        # Create the document
-        self.current_document = HDLDocument(filename, self.language)
-        self.current_document.set_source_text(source_text)
+    def parse(self, filename: str, source_text: str, library_name: str = "work") -> Optional[HDLLibrary]:
+        """Parse HDL source code and return HDLLibrary or None if parsing fails"""
+        # Create the library
+        self.current_library = HDLLibrary(library_name, self.language)
+        self.current_source_path = filename
 
         # Reset line/column tracking
         self.current_line = 1
@@ -67,7 +62,7 @@ class BaseHDLParser(ABC):
         except Exception as e:
             raise RuntimeError(f"Parse error in {filename}: {str(e)}")
 
-        return self.current_document
+        return self.current_library
 
     def create_token(self, token_type: str, value: str, line: int = None, column: int = None) -> HDLToken:
         """Create an HDL token with position information"""
@@ -150,3 +145,16 @@ class BaseHDLParser(ABC):
             groups.append(default_group)
 
         return groups
+
+    def create_library(self, library_name: str) -> HDLLibrary:
+        """Create a new HDL library with the specified name"""
+        self.current_library = HDLLibrary(library_name, self.language)
+        return self.current_library
+
+    def get_current_library(self) -> Optional[HDLLibrary]:
+        """Get the current library being parsed"""
+        return self.current_library
+
+    def reset(self):
+        """Reset parser state"""
+        self.current_library = None

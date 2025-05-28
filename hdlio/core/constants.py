@@ -1,27 +1,38 @@
 """
-HDL Language Version Constants
+HDL Language Reference Manual (LRM) Constants
 """
 
-# VHDL Versions
-VHDL_1993 = "vhdl_1993"
-VHDL_2000 = "vhdl_2000"
-VHDL_2008 = "vhdl_2008"
-VHDL_2019 = "vhdl_2019"
+from enum import Enum
 
-# Verilog Versions
-VERILOG_1995 = "verilog_1995"
-VERILOG_2001 = "verilog_2001"
-VERILOG_2005 = "verilog_2005"
 
-# SystemVerilog Versions
-SYSTEMVERILOG_2005 = "systemverilog_2005"
-SYSTEMVERILOG_2009 = "systemverilog_2009"
-SYSTEMVERILOG_2012 = "systemverilog_2012"
-SYSTEMVERILOG_2017 = "systemverilog_2017"
+class HDL_LRM(Enum):
+    VHDL_1993          = "VHDL_1993"
+    VHDL_2000          = "VHDL_2000"
+    VHDL_2008          = "VHDL_2008"
+    VHDL_2019          = "VHDL_2019"
+    Verilog_1995       = "Verilog_1995"
+    Verilog_2001       = "Verilog_2001"
+    Verilog_2005       = "Verilog_2005"
+    SystemVerilog_2005 = "SystemVerilog_2005"
+    SystemVerilog_2009 = "SystemVerilog_2009"
+    SystemVerilog_2012 = "SystemVerilog_2012"
+    SystemVerilog_2017 = "SystemVerilog_2017"
 
-# Language Categories
-VHDL_LANGUAGES = [VHDL_1993, VHDL_2000, VHDL_2008, VHDL_2019]
-VERILOG_LANGUAGES = [VERILOG_1995, VERILOG_2001, VERILOG_2005]
-SYSTEMVERILOG_LANGUAGES = [SYSTEMVERILOG_2005, SYSTEMVERILOG_2009, SYSTEMVERILOG_2012, SYSTEMVERILOG_2017]
 
-ALL_LANGUAGES = VHDL_LANGUAGES + VERILOG_LANGUAGES + SYSTEMVERILOG_LANGUAGES
+# Convenience constants
+VHDL_1993          = HDL_LRM.VHDL_1993
+VHDL_2000          = HDL_LRM.VHDL_2000
+VHDL_2008          = HDL_LRM.VHDL_2008
+VHDL_2019          = HDL_LRM.VHDL_2019
+Verilog_1995       = HDL_LRM.Verilog_1995
+Verilog_2001       = HDL_LRM.Verilog_2001
+Verilog_2005       = HDL_LRM.Verilog_2005
+SystemVerilog_2005 = HDL_LRM.SystemVerilog_2005
+SystemVerilog_2009 = HDL_LRM.SystemVerilog_2009
+SystemVerilog_2012 = HDL_LRM.SystemVerilog_2012
+SystemVerilog_2017 = HDL_LRM.SystemVerilog_2017
+
+# Version group constants for parser factory
+VHDL_VERSIONS = (VHDL_1993, VHDL_2000, VHDL_2008, VHDL_2019)
+VERILOG_VERSIONS = (Verilog_1995, Verilog_2001, Verilog_2005)
+SYSTEMVERILOG_VERSIONS = (SystemVerilog_2005, SystemVerilog_2009, SystemVerilog_2012, SystemVerilog_2017)

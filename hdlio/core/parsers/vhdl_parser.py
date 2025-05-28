@@ -18,11 +18,13 @@ import ply.lex as lex
 import ply.yacc as yacc
 
 from ..vhdl import VHDLEntity, VHDLArchitecture, VHDLPackage, VHDLPackageBody, VHDLConfiguration, VHDLPort
-from ..base import HDLDocument, HDLToken, HDLPortGroup
+from ..base import HDLLibrary, HDLToken, HDLPortGroup
+from .base_parser import BaseHDLParser
 
-# Global variables for the parser
-current_document = None
+# Global variables for parser state
+current_library = None
 current_tokens = []
+current_source_path = None
 
 # VHDL Token definitions - comprehensive set for all VHDL features
 tokens = (
@@ -46,6 +48,7 @@ tokens = (
     'ENTITY',
     'ARCHITECTURE',
     'PACKAGE',
+    'BODY',
     'CONFIGURATION',
     'IS',
     'END',
@@ -96,7 +99,6 @@ tokens = (
     'FUNCTION',
     'PROCEDURE',
     'RETURN',
-    'PACKAGE_BODY',
     'RECORD',
     'ACCESS',
     'FILE',
@@ -180,11 +182,15 @@ tokens = (
     'APOSTROPHE'
 )
 
+# Specify the start symbol for the parser
+start = 'design_file'
+
 # VHDL reserved words - comprehensive set
 reserved = {
     'entity': 'ENTITY',
     'architecture': 'ARCHITECTURE',
     'package': 'PACKAGE',
+    'body': 'BODY',
     'configuration': 'CONFIGURATION',
     'is': 'IS',
     'end': 'END',
@@ -235,7 +241,6 @@ reserved = {
     'function': 'FUNCTION',
     'procedure': 'PROCEDURE',
     'return': 'RETURN',
-    'package': 'PACKAGE_BODY',
     'record': 'RECORD',
     'access': 'ACCESS',
     'file': 'FILE',
@@ -388,13 +393,17 @@ def find_column(token):
 def p_design_file(p):
     '''design_file : design_units
                    | empty'''
-    pass
+    print(f"DEBUG p_design_file: Called with {len(p)} parts")
+    if len(p) > 1:
+        print(f"  p[1]: {p[1]}")
 
 
 def p_design_units(p):
     '''design_units : design_unit
                    | design_units design_unit'''
-    pass
+    print(f"DEBUG p_design_units: Called with {len(p)} parts")
+    for i, part in enumerate(p):
+        print(f"  p[{i}]: {part}")
 
 
 def p_design_unit(p):
@@ -406,7 +415,9 @@ def p_design_unit(p):
                   | library_clause
                   | use_clause
                   | comment_line'''
-    pass
+    print(f"DEBUG p_design_unit: Called with {len(p)} parts")
+    for i, part in enumerate(p):
+        print(f"  p[{i}]: {part}")
 
 
 def p_comment_line(p):
@@ -420,22 +431,60 @@ def p_empty(p):
 
 
 def p_entity_declaration(p):
-    '''entity_declaration : ENTITY IDENTIFIER IS entity_body END ENTITY SEMICOLON
-                         | ENTITY IDENTIFIER IS entity_body END SEMICOLON'''
+    '''entity_declaration : ENTITY IDENTIFIER IS entity_header entity_declarative_part BEGIN entity_statement_part END entity_name SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header entity_declarative_part END entity_name SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header BEGIN entity_statement_part END entity_name SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header END entity_name SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header entity_declarative_part BEGIN entity_statement_part END SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header entity_declarative_part END SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header BEGIN entity_statement_part END SEMICOLON
+                          | ENTITY IDENTIFIER IS entity_header END SEMICOLON
+                          | ENTITY IDENTIFIER IS END entity_name SEMICOLON
+                          | ENTITY IDENTIFIER IS END SEMICOLON'''
+    global current_library, current_tokens
+
+    print(f"DEBUG p_entity_declaration: Called with {len(p)} parts")
+    for i, part in enumerate(p):
+        print(f"  p[{i}]: {part}")
+
     entity_name = p[2]
     entity = VHDLEntity(entity_name)
 
-        # Extract ports from entity body if any
-    entity_body = p[4]
-    if entity_body and isinstance(entity_body, list):
-        port_groups = extract_port_groups(entity_body, current_tokens)
+    print(f"DEBUG: Creating entity '{entity_name}'")
+
+    # Set the source file path
+    global current_source_path
+    if current_source_path:
+        entity.set_source(current_source_path)
+
+    # Extract ports from entity header if present
+    entity_header = None
+    if len(p) > 6 and p[4] not in ['END', 'BEGIN']:  # Check if we have an entity header
+        entity_header = p[4]
+
+    if entity_header and isinstance(entity_header, list):
+        print(f"DEBUG: Found {len(entity_header)} ports in entity header")
+        port_groups = extract_port_groups(entity_header, current_tokens)
         for group in port_groups:
             entity.add_port_group(group)
-        # print(f"Added {len(port_groups)} port groups to entity {entity_name}")  # Debug: commented out
+    else:
+        print(f"DEBUG: No ports found in entity header: {entity_header}")
 
-    global current_document
-    current_document.add_design_unit(entity)
-    # print(f"Created entity: {entity_name}")  # Debug: commented out
+    current_library.add_design_unit(entity)
+    print(f"DEBUG: Added entity '{entity_name}' to library. Total units: {len(current_library.design_units)}")
+
+
+def p_entity_header(p):
+    '''entity_header : generic_clause
+                     | port_clause
+                     | generic_clause port_clause
+                     | port_clause generic_clause
+                     | empty'''
+    if len(p) == 2:
+        p[0] = p[1]  # Return the single clause
+    elif len(p) == 3:
+        # Return the port clause if we have both generic and port
+        p[0] = p[2] if isinstance(p[2], list) else p[1]
 
 
 def p_entity_body(p):
@@ -504,54 +553,158 @@ def p_port_mode(p):
 
 def p_type_mark(p):
     '''type_mark : IDENTIFIER
+                | qualified_type_name
                 | STD_LOGIC
                 | STD_LOGIC_VECTOR
+                | STD_LOGIC_VECTOR LPAREN constraint RPAREN
                 | INTEGER
                 | NATURAL
                 | POSITIVE
                 | BOOLEAN
                 | BIT
-                | BIT_VECTOR'''
+                | BIT_VECTOR
+                | BIT_VECTOR LPAREN constraint RPAREN
+                | IDENTIFIER LPAREN constraint RPAREN
+                | qualified_type_name LPAREN constraint RPAREN'''
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 5:
+        p[0] = f"{p[1]}({p[3]})"
+
+
+def p_qualified_type_name(p):
+    '''qualified_type_name : IDENTIFIER DOT IDENTIFIER
+                           | IDENTIFIER DOT IDENTIFIER DOT IDENTIFIER'''
+    if len(p) == 4:
+        p[0] = f"{p[1]}.{p[3]}"
+    else:
+        p[0] = f"{p[1]}.{p[3]}.{p[5]}"
+
+
+def p_constraint(p):
+    '''constraint : range_constraint
+                  | index_constraint
+                  | array_constraint'''
     p[0] = p[1]
 
 
+def p_range_constraint(p):
+    '''range_constraint : range_expression
+                        | RANGE range_expression'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = f"range {p[2]}"
+
+
+def p_index_constraint(p):
+    '''index_constraint : LPAREN discrete_range_list RPAREN'''
+    p[0] = f"({p[2]})"
+
+
+def p_discrete_range_list(p):
+    '''discrete_range_list : discrete_range
+                           | discrete_range_list COMMA discrete_range'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = f"{p[1]}, {p[3]}"
+
+
+def p_array_constraint(p):
+    '''array_constraint : LPAREN constraint_list RPAREN'''
+    p[0] = f"({p[2]})"
+
+
+def p_constraint_list(p):
+    '''constraint_list : constraint
+                       | constraint_list COMMA constraint'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = f"{p[1]}, {p[3]}"
+
+
+def p_range_expression(p):
+    '''range_expression : expression TO expression
+                        | expression DOWNTO expression
+                        | NUMBER TO NUMBER
+                        | NUMBER DOWNTO NUMBER
+                        | IDENTIFIER TO IDENTIFIER
+                        | IDENTIFIER DOWNTO IDENTIFIER
+                        | expression_with_attributes TO expression_with_attributes
+                        | expression_with_attributes DOWNTO expression_with_attributes'''
+    p[0] = f"{p[1]} {p[2]} {p[3]}"
+
+
+def p_expression_with_attributes(p):
+    '''expression_with_attributes : IDENTIFIER APOSTROPHE IDENTIFIER
+                                  | IDENTIFIER APOSTROPHE IDENTIFIER LPAREN expression RPAREN
+                                  | expression'''
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = f"{p[1]}'{p[3]}"
+    else:
+        p[0] = f"{p[1]}'{p[3]}({p[5]})"
+
+
 def p_architecture_body(p):
-    '''architecture_body : ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part BEGIN architecture_statement_part END SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part BEGIN architecture_statement_part END IDENTIFIER SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS BEGIN architecture_statement_part END SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS BEGIN architecture_statement_part END IDENTIFIER SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part END SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part END IDENTIFIER SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS END SEMICOLON
-                        | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS END IDENTIFIER SEMICOLON'''
+    '''architecture_body : ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part BEGIN architecture_statement_part END architecture_name SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part BEGIN architecture_statement_part END SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS BEGIN architecture_statement_part END architecture_name SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS BEGIN architecture_statement_part END SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part END architecture_name SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS architecture_declarative_part END SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS END architecture_name SEMICOLON
+                         | ARCHITECTURE IDENTIFIER OF IDENTIFIER IS END SEMICOLON'''
+    global current_library
     arch_name = p[2]
     entity_name = p[4]
     architecture = VHDLArchitecture(arch_name, entity_name)
-    current_document.add_design_unit(architecture)
+
+    if current_library:
+        current_library.add_design_unit(architecture)
 
 
 def p_package_declaration(p):
-    '''package_declaration : PACKAGE IDENTIFIER IS END SEMICOLON
-                          | PACKAGE IDENTIFIER IS END IDENTIFIER SEMICOLON'''
+    '''package_declaration : PACKAGE IDENTIFIER IS package_declarative_part END package_name SEMICOLON
+                           | PACKAGE IDENTIFIER IS package_declarative_part END SEMICOLON
+                           | PACKAGE IDENTIFIER IS END package_name SEMICOLON
+                           | PACKAGE IDENTIFIER IS END SEMICOLON'''
+    global current_library
     package_name = p[2]
     package = VHDLPackage(package_name)
-    current_document.add_design_unit(package)
+
+    if current_library:
+        current_library.add_design_unit(package)
 
 
 def p_package_body(p):
-    '''package_body : PACKAGE IDENTIFIER IDENTIFIER IS END SEMICOLON
-                   | PACKAGE IDENTIFIER IDENTIFIER IS END IDENTIFIER SEMICOLON'''
-    package_name = p[3]  # Third token is the package name after 'body'
+    '''package_body : PACKAGE BODY IDENTIFIER IS package_body_declarative_part END package_body_name SEMICOLON
+                    | PACKAGE BODY IDENTIFIER IS package_body_declarative_part END SEMICOLON
+                    | PACKAGE BODY IDENTIFIER IS END package_body_name SEMICOLON
+                    | PACKAGE BODY IDENTIFIER IS END SEMICOLON'''
+    global current_library
+    package_name = p[3]
     package_body = VHDLPackageBody(package_name)
-    current_document.add_design_unit(package_body)
+
+    if current_library:
+        current_library.add_design_unit(package_body)
 
 
 def p_configuration_declaration(p):
-    '''configuration_declaration : CONFIGURATION IDENTIFIER OF IDENTIFIER IS END SEMICOLON
-                                | CONFIGURATION IDENTIFIER OF IDENTIFIER IS END IDENTIFIER SEMICOLON'''
+    '''configuration_declaration : CONFIGURATION IDENTIFIER OF IDENTIFIER IS configuration_declarative_part block_configuration END configuration_name SEMICOLON
+                                 | CONFIGURATION IDENTIFIER OF IDENTIFIER IS configuration_declarative_part block_configuration END SEMICOLON
+                                 | CONFIGURATION IDENTIFIER OF IDENTIFIER IS block_configuration END configuration_name SEMICOLON
+                                 | CONFIGURATION IDENTIFIER OF IDENTIFIER IS block_configuration END SEMICOLON'''
+    global current_library
     config_name = p[2]
-    config = VHDLConfiguration(config_name)
-    current_document.add_design_unit(config)
+    entity_name = p[4]
+    config = VHDLConfiguration(config_name, entity_name)
+
+    if current_library:
+        current_library.add_design_unit(config)
 
 
 def p_generic_clause(p):
@@ -926,7 +1079,10 @@ def p_discrete_range(p):
                       | expression DOWNTO expression
                       | type_mark RANGE expression TO expression
                       | type_mark RANGE expression DOWNTO expression'''
-    pass
+    if len(p) == 4:
+        p[0] = f"{p[1]} {p[2]} {p[3]}"
+    else:
+        p[0] = f"{p[1]} range {p[3]} {p[4]} {p[5]}"
 
 # Control statements
 
@@ -1441,17 +1597,151 @@ def p_operator_keywords(p):
 t_BAR = r'\|'
 t_APOSTROPHE = r"'"
 
+# Add missing name rules
+def p_entity_name(p):
+    '''entity_name : IDENTIFIER
+                   | empty'''
+    pass
+
+def p_architecture_name(p):
+    '''architecture_name : IDENTIFIER
+                         | empty'''
+    pass
+
+def p_package_name(p):
+    '''package_name : IDENTIFIER
+                    | empty'''
+    pass
+
+def p_package_body_name(p):
+    '''package_body_name : IDENTIFIER
+                         | empty'''
+    pass
+
+def p_configuration_name(p):
+    '''configuration_name : IDENTIFIER
+                          | empty'''
+    pass
+
+def p_package_declarative_part(p):
+    '''package_declarative_part : package_declarative_items
+                                | empty'''
+    pass
+
+def p_package_declarative_items(p):
+    '''package_declarative_items : package_declarative_item
+                                 | package_declarative_items package_declarative_item'''
+    pass
+
+def p_package_declarative_item(p):
+    '''package_declarative_item : type_declaration
+                                | subtype_declaration
+                                | constant_declaration
+                                | function_declaration
+                                | procedure_declaration
+                                | attribute_declaration
+                                | use_clause
+                                | comment_line
+                                | any_declarative_statement'''
+    pass
+
+def p_package_body_declarative_part(p):
+    '''package_body_declarative_part : package_body_declarative_items
+                                     | empty'''
+    pass
+
+def p_package_body_declarative_items(p):
+    '''package_body_declarative_items : package_body_declarative_item
+                                      | package_body_declarative_items package_body_declarative_item'''
+    pass
+
+def p_package_body_declarative_item(p):
+    '''package_body_declarative_item : type_declaration
+                                     | subtype_declaration
+                                     | constant_declaration
+                                     | function_declaration
+                                     | procedure_declaration
+                                     | attribute_declaration
+                                     | use_clause
+                                     | comment_line
+                                     | any_declarative_statement'''
+    pass
+
+def p_configuration_declarative_part(p):
+    '''configuration_declarative_part : configuration_declarative_items
+                                      | empty'''
+    pass
+
+def p_configuration_declarative_items(p):
+    '''configuration_declarative_items : configuration_declarative_item
+                                        | configuration_declarative_items configuration_declarative_item'''
+    pass
+
+def p_configuration_declarative_item(p):
+    '''configuration_declarative_item : use_clause
+                                      | attribute_declaration
+                                      | comment_line
+                                      | any_declarative_statement'''
+    pass
+
+def p_block_configuration(p):
+    '''block_configuration : FOR IDENTIFIER use_clause END FOR SEMICOLON
+                           | FOR IDENTIFIER END FOR SEMICOLON
+                           | FOR ALL use_clause END FOR SEMICOLON
+                           | FOR ALL END FOR SEMICOLON'''
+    pass
+
+def p_entity_declarative_part(p):
+    '''entity_declarative_part : entity_declarative_items
+                                | empty'''
+    pass
+
+def p_entity_declarative_items(p):
+    '''entity_declarative_items : entity_declarative_item
+                                 | entity_declarative_items entity_declarative_item'''
+    pass
+
+def p_entity_declarative_item(p):
+    '''entity_declarative_item : type_declaration
+                                | subtype_declaration
+                                | constant_declaration
+                                | signal_declaration
+                                | function_declaration
+                                | procedure_declaration
+                                | attribute_declaration
+                                | use_clause
+                                | comment_line
+                                | any_declarative_statement'''
+    pass
+
+def p_entity_statement_part(p):
+    '''entity_statement_part : entity_statements
+                              | empty'''
+    pass
+
+def p_entity_statements(p):
+    '''entity_statements : entity_statement
+                         | entity_statements entity_statement'''
+    pass
+
+def p_entity_statement(p):
+    '''entity_statement : concurrent_signal_assignment
+                        | assert_statement
+                        | process_statement
+                        | comment_line
+                        | any_statement'''
+    pass
 
 def p_error(p):
     if p:
-        # Much quieter error reporting - only for debugging when needed
-        # print(f"Syntax error at token {p.type} ('{p.value}') on line {p.lineno}")
+        print(f"PARSE ERROR: Syntax error at token {p.type} ('{p.value}') on line {p.lineno}")
+        print(f"  Token position: {p.lexpos}")
         # Skip the problematic token and continue parsing
         if hasattr(parser, 'errok'):
             parser.errok()
     else:
+        print("PARSE ERROR: Unexpected end of file")
         # End of file - this is normal, don't print anything
-        pass
 
 
 def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> List[HDLPortGroup]:
@@ -1460,181 +1750,194 @@ def extract_port_groups(ports: List[VHDLPort], port_tokens: List[HDLToken]) -> L
         return []
 
     groups = []
+    current_group = None
+    current_group_name = "group1"
     group_counter = 1
 
-    # print(f"Extracting port groups from {len(ports)} ports")  # Debug: commented out
+    # Get the source text to analyze comments
+    global current_source_path
+    source_lines = []
+    if current_source_path:
+        try:
+            with open(current_source_path, 'r', encoding='utf-8') as f:
+                source_lines = f.readlines()
+        except:
+            pass
 
-    # Get the source text from the current document to analyze comments
-    global current_document
-    if not current_document or not current_document.source_text:
-        # Fallback to simple grouping
-        default_group = HDLPortGroup("group1")
-        for port in ports:
-            default_group.add_port(port)
-        groups.append(default_group)
-        return groups
+    # If we have source text, try to extract groups based on comments
+    if source_lines:
+        groups = extract_groups_from_source(ports, source_lines)
+        if groups:
+            return groups
 
-    source_text = current_document.source_text
+    # Fallback: Group by port direction if no comment-based grouping found
+    direction_groups = {}
+    for port in ports:
+        direction = port.direction.lower()
+        if direction not in direction_groups:
+            direction_groups[direction] = HDLPortGroup(f"{direction}_ports")
+        direction_groups[direction].add_port(port)
+
+    # If we have multiple direction groups, return them
+    if len(direction_groups) > 1:
+        return list(direction_groups.values())
+
+    # Final fallback: single group
+    default_group = HDLPortGroup("ports")
+    for port in ports:
+        default_group.add_port(port)
+    return [default_group]
+
+
+def extract_groups_from_source(ports: List[VHDLPort], source_lines: List[str]) -> List[HDLPortGroup]:
+    """Extract port groups by analyzing comments in source text"""
+    groups = []
+    current_group = None
+    current_group_name = "ports"
 
     # Find the port section in the source
-    port_section_start = source_text.find("port")
-    if port_section_start == -1:
-        # No port section found, use default grouping
-        default_group = HDLPortGroup("group1")
-        for port in ports:
-            default_group.add_port(port)
-        groups.append(default_group)
-        return groups
+    port_section_start = -1
+    port_section_end = -1
 
-    # Extract the port section (from "port" to the closing parenthesis)
-    paren_count = 0
-    port_section_end = port_section_start
-    found_opening_paren = False
+    for i, line in enumerate(source_lines):
+        line_lower = line.strip().lower()
+        if 'port' in line_lower and '(' in line_lower:
+            port_section_start = i
+        elif port_section_start >= 0 and ');' in line:
+            port_section_end = i
+            break
 
-    for i in range(port_section_start, len(source_text)):
-        char = source_text[i]
-        if char == '(':
-            paren_count += 1
-            found_opening_paren = True
-        elif char == ')':
-            paren_count -= 1
-            if found_opening_paren and paren_count == 0:
-                port_section_end = i
-                break
+    if port_section_start < 0:
+        return []
 
-    port_section = source_text[port_section_start:port_section_end + 1]
-    # print(f"Analyzing port section: {port_section[:100]}...")  # Debug: commented out
+    # Analyze the port section for comments and group patterns
+    port_index = 0
 
-    # Split the port section into lines for analysis
-    lines = port_section.split('\n')
+    for i in range(port_section_start, min(port_section_end + 1, len(source_lines))):
+        line = source_lines[i].strip()
 
-    # Analyze the lines to find comments and associate them with ports
-    current_group_name = None
-    current_group = None
-    port_to_group_map = {}
+        # Check for comment that might indicate a new group
+        if line.startswith('--'):
+            comment_text = line[2:].strip()
 
-    for line_num, line in enumerate(lines):
-        stripped_line = line.strip()
+            # Look for group indicators in comments
+            group_keywords = ['clock', 'reset', 'data', 'control', 'address', 'status', 'interrupt', 'config']
+            for keyword in group_keywords:
+                if keyword.lower() in comment_text.lower():
+                    # Start a new group
+                    if current_group and len(current_group.ports) > 0:
+                        groups.append(current_group)
 
-        # Check if this line contains a comment
-        if '--' in line:
-            comment_start = line.find('--')
-            comment_text = line[comment_start + 2:].strip()
-            if comment_text:
-                current_group_name = comment_text
-                # print(f"Found comment group: '{current_group_name}'")  # Debug: commented out
-                continue
+                    # Extract a meaningful name from the comment
+                    current_group_name = extract_group_name_from_comment(comment_text)
+                    current_group = HDLPortGroup(current_group_name)
+                    break
 
         # Check if this line contains a port declaration
-        port_found = False
-        for port in ports:
-            port_name = port.get_name()
-            if port_name in stripped_line and ':' in stripped_line:
-                # This line contains a port declaration
-                port_found = True
+        elif ':' in line and any(direction in line.lower() for direction in ['in ', 'out ', 'inout ', 'buffer ']):
+            # Extract port name from the line
+            port_name = extract_port_name_from_line(line)
 
-                # Determine the group for this port
-                if current_group_name:
-                    group_name = current_group_name
-                else:
-                    group_name = f"group{group_counter}"
-                    group_counter += 1
+            # Find the corresponding port object
+            matching_port = None
+            for port in ports[port_index:]:
+                if port.name == port_name:
+                    matching_port = port
+                    port_index = ports.index(port) + 1
+                    break
 
-                # Find or create the group
-                group = None
-                for g in groups:
-                    if g.get_name() == group_name:
-                        group = g
-                        break
+            if matching_port:
+                # Add to current group or create default group
+                if current_group is None:
+                    current_group = HDLPortGroup(current_group_name)
+                current_group.add_port(matching_port)
 
-                if not group:
-                    group = HDLPortGroup(group_name)
-                    groups.append(group)
-                    # print(f"Created new group: '{group_name}'")  # Debug: commented out
+    # Add the last group if it has ports
+    if current_group and len(current_group.ports) > 0:
+        groups.append(current_group)
 
-                # Add port to group if not already added
-                if port_name not in port_to_group_map:
-                    group.add_port(port)
-                    port_to_group_map[port_name] = group
-                    # print(f"Added port '{port_name}' to group '{group_name}'")  # Debug: commented out
-
-                # Keep the group name active for subsequent ports under the same comment
-                # Don't reset it here - let empty lines or new comments reset it
-                break
-
-        # Check for empty lines or lines with only whitespace - these can separate groups
-        if not stripped_line or (not stripped_line.startswith('--') and not port_found):
-            # Empty line might indicate group boundary, but don't reset if we just found a comment
-            # and haven't assigned any ports to it yet
-            if current_group_name and not current_group_name.startswith("group"):
-                # Check if we've already used this group name
-                group_used = any(g.get_name() == current_group_name for g in groups)
-                if group_used:
-                    current_group_name = None
-
-    # Handle any ports that weren't assigned to groups
-    unassigned_ports = [port for port in ports if port.get_name() not in port_to_group_map]
-
-    if unassigned_ports:
-        # If we have comment groups but unassigned ports, try to assign them to the last comment group
-        # or create a new group
-        if groups and current_group_name and not current_group_name.startswith("group"):
-            # Assign to the last comment group found
-            last_group = groups[-1]
-            for port in unassigned_ports:
-                last_group.add_port(port)
-                # print(f"Added unassigned port '{port.get_name()}' to group '{last_group.get_name()}'")  # Debug: commented out
-        else:
-            # Create a default group for unassigned ports
-            if not groups:
-                default_group = HDLPortGroup(f"group{group_counter}")
-                groups.append(default_group)
-            else:
-                # Add to a new group
-                default_group = HDLPortGroup(f"group{group_counter}")
-                groups.append(default_group)
-
-            for port in unassigned_ports:
-                default_group.add_port(port)
-                # print(f"Added unassigned port '{port.get_name()}' to group '{default_group.get_name()}'")  # Debug: commented out
-
-    # If no groups were created, create a default one
-    if not groups:
-        default_group = HDLPortGroup("group1")
-        for port in ports:
-            default_group.add_port(port)
-        groups.append(default_group)
-
-    # print(f"Created {len(groups)} port groups total")  # Debug: commented out
+    # If no groups were created, return empty list to trigger fallback
     return groups
+
+
+def extract_group_name_from_comment(comment_text: str) -> str:
+    """Extract a meaningful group name from a comment"""
+    # Clean up the comment text
+    text = comment_text.strip().lower()
+
+    # Remove common words
+    text = text.replace('signals', '').replace('ports', '').replace('group', '').strip()
+
+    # Capitalize first letter of each word
+    words = text.split()
+    if words:
+        return '_'.join(word.capitalize() for word in words[:2])  # Take first 2 words max
+
+    return "group"
+
+
+def extract_port_name_from_line(line: str) -> str:
+    """Extract port name from a VHDL port declaration line"""
+    # Look for pattern: port_name : direction type
+    parts = line.split(':')
+    if len(parts) >= 2:
+        port_name = parts[0].strip()
+        # Remove any leading characters that aren't part of the name
+        port_name = port_name.split()[-1]  # Take the last word before ':'
+        return port_name
+    return ""
 
 # Build the lexer and parser
 lexer = lex.lex()
 parser = yacc.yacc(debug=False)
 
 
-def parse_vhdl(filename: str, source_text: str, language: str) -> HDLDocument:
-    """Parse VHDL source text"""
-    global current_document, current_tokens
+def parse_vhdl(filename: str, source_text: str, hdl_lrm, library_name: str = "work") -> HDLLibrary:
+    """Parse VHDL source text and return HDLLibrary"""
+    global current_library, current_tokens, current_source_path
 
-    # Create the document
-    current_document = HDLDocument(filename, language)
-    current_document.set_source_text(source_text)
+    # Convert HDL_LRM enum to string for library language field
+    language_str = hdl_lrm.value if hasattr(hdl_lrm, 'value') else str(hdl_lrm)
+
+    current_library = HDLLibrary(library_name, language_str)
     current_tokens = []
+    current_source_path = filename
 
-    # Parse the source
     try:
-        result = parser.parse(source_text, lexer=lexer)
-        return current_document
+        # Build lexer and parser for this parsing session
+        lexer = lex.lex()
+        parser = yacc.yacc(debug=False)
+
+        print(f"DEBUG: Starting VHDL parse of {filename}")
+        print(f"DEBUG: Source length: {len(source_text)} characters")
+
+        # Parse the source text
+        result = parser.parse(source_text, lexer=lexer, debug=False)
+
+        print(f"DEBUG: Parse result: {result}")
+        print(f"DEBUG: Design units created: {len(current_library.design_units)}")
+
+        # Set tokens in library
+        current_library.tokens = current_tokens
+
+        return current_library
     except Exception as e:
-        raise RuntimeError(f"Parse error in {filename}: {str(e)}")
+        print(f"Error parsing VHDL: {e}")
+        import traceback
+        traceback.print_exc()
+        return current_library
 
 
-class VHDLParser:
+class VHDLParser(BaseHDLParser):
     """VHDL Parser - Supports all VHDL language features and versions"""
 
-    def __init__(self, language: str):
-        self.language = language
+    def __init__(self, hdl_lrm):
+        super().__init__(hdl_lrm)
 
-    def parse(self, filename: str, source_text: str) -> HDLDocument:
-        return parse_vhdl(filename, source_text, self.language)
+    def _setup_lexer(self):
+        """Setup VHDL lexer"""
+        self.lexer = lex.lex()
+
+    def _setup_parser(self):
+        """Setup VHDL parser"""
+        self.parser = yacc.yacc(debug=False)

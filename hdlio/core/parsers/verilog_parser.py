@@ -20,10 +20,10 @@ import ply.yacc as yacc
 
 from .base_parser import BaseHDLParser
 from ..verilog import VerilogModule, VerilogPort
-from ..base import HDLDocument, HDLToken, HDLPortGroup
+from ..base import HDLLibrary, HDLToken, HDLPortGroup
 
 # Global variables for parser state
-current_document = None
+current_library = None
 current_tokens = []
 current_modules = []
 parser_instance = None
@@ -287,7 +287,7 @@ def p_module_declaration(p):
                          | MODULE IDENTIFIER import_list parameter_port_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER import_list LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER import_list SEMICOLON module_items ENDMODULE'''
-    global current_document, current_tokens, parser_instance
+    global current_library, current_tokens, parser_instance
     module_name = p[2]
     module = VerilogModule(module_name)
 
@@ -307,8 +307,8 @@ def p_module_declaration(p):
             for group in port_groups:
                 module.add_port_group(group)
 
-    if current_document:
-        current_document.add_design_unit(module)
+    if current_library:
+        current_library.add_design_unit(module)
 
 def p_parameter_port_list(p):
     '''parameter_port_list : HASH LPAREN parameter_list RPAREN
@@ -850,7 +850,7 @@ def p_task_item(p):
 def p_package_declaration(p):
     '''package_declaration : PACKAGE IDENTIFIER SEMICOLON package_items ENDPACKAGE
                           | PACKAGE IDENTIFIER SEMICOLON ENDPACKAGE'''
-    global current_document, parser_instance
+    global current_library, parser_instance
     package_name = p[2]
     package = VerilogModule(package_name)  # Use VerilogModule for compatibility
 
@@ -861,8 +861,8 @@ def p_package_declaration(p):
             pass
         parser_instance.current_package = None
 
-    if current_document:
-        current_document.add_design_unit(package)
+    if current_library:
+        current_library.add_design_unit(package)
 
 def p_package_items(p):
     '''package_items : package_item
@@ -913,12 +913,15 @@ def p_error(p):
     else:
         print("Syntax error at EOF")
 
-def parse_verilog(filename: str, source_text: str, language: str) -> HDLDocument:
-    """Parse Verilog source text and return HDLDocument"""
-    global current_document, current_tokens, current_modules, parser_instance
+def parse_verilog(filename: str, source_text: str, hdl_lrm) -> HDLLibrary:
+    """Parse Verilog source text and return HDLLibrary"""
+    global current_library, current_tokens, current_modules, parser_instance
 
+    # Convert HDL_LRM enum to string for library language field
+    language_str = hdl_lrm.value if hasattr(hdl_lrm, 'value') else str(hdl_lrm)
+    
     # Initialize global state
-    current_document = HDLDocument(filename, language)
+    current_library = HDLLibrary(filename, language_str)
     current_tokens = []
     current_modules = []
 
@@ -930,14 +933,14 @@ def parse_verilog(filename: str, source_text: str, language: str) -> HDLDocument
         # Parse the source text
         result = parser.parse(source_text, lexer=lexer, debug=False)
 
-        # Set tokens in document
-        current_document.tokens = current_tokens
+        # Set tokens in library
+        current_library.tokens = current_tokens
 
-        return current_document
+        return current_library
 
     except Exception as e:
         print(f"Error parsing Verilog: {e}")
-        return current_document
+        return current_library
 
 def extract_port_groups(port_list, tokens):
     """Extract port groups from parsed port list"""
@@ -968,8 +971,8 @@ def extract_port_groups(port_list, tokens):
 class VerilogParser(BaseHDLParser):
     """Enhanced Verilog Parser with symbol table and macro support"""
 
-    def __init__(self, language: str):
-        super().__init__(language)
+    def __init__(self, hdl_lrm):
+        super().__init__(hdl_lrm)
         self.symbol_table: Dict[str, Dict[str, str]] = {}  # package_name -> {symbol_name: type}
         self.current_package: Optional[str] = None  # Track current package being parsed
         self.macros: Dict[str, str] = {}  # Store macro definitions
@@ -1014,13 +1017,13 @@ class VerilogParser(BaseHDLParser):
                     # Import specific symbol
                     pass
 
-    def parse(self, filename: str, source_text: str) -> HDLDocument:
-        """Parse Verilog source and return HDLDocument"""
+    def parse(self, filename: str, source_text: str, library_name: str = "work") -> HDLLibrary:
+        """Parse Verilog source and return HDLLibrary"""
         global parser_instance
         parser_instance = self
         self.error_count = 0
 
         try:
-            return parse_verilog(filename, source_text, self.language)
+            return parse_verilog(filename, source_text, self.hdl_lrm)
         finally:
             parser_instance = None

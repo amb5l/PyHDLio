@@ -18,24 +18,37 @@ import ply.yacc as yacc
 
 from .base_parser import BaseHDLParser
 from ..systemverilog import SystemVerilogModule, SystemVerilogInterface, SystemVerilogPackage, SystemVerilogPort
-from ..base import HDLDocument, HDLToken, HDLPortGroup
+from ..base import HDLLibrary, HDLToken, HDLPortGroup
 
-# Import Verilog parser tokens and reserved words
-from .verilog_parser import tokens as verilog_tokens, reserved as verilog_reserved
+# Import Verilog parser tokens and keywords
+from .verilog_parser import tokens as verilog_tokens, keywords as verilog_keywords
+
+# Import token functions that exist in verilog_parser
+from .verilog_parser import (
+    t_ASSIGN, t_NON_BLOCKING_ASSIGN, t_COMMENT_BLOCK,
+    t_COMMENT_LINE, t_STRING_LITERAL, t_NUMBER, t_newline, t_error,
+    find_column, t_ignore
+)
+
+# Import simple token rules from verilog_parser
+from .verilog_parser import (
+    t_SEMICOLON, t_COLON, t_COMMA, t_DOT, t_LPAREN, t_RPAREN,
+    t_LBRACKET, t_RBRACKET, t_LBRACE, t_RBRACE, t_AT, t_HASH,
+    t_SHIFT_LEFT, t_SHIFT_RIGHT, t_LOGICAL_AND, t_LOGICAL_OR,
+    t_EQ, t_NE, t_GE, t_LT, t_GT, t_LE, t_PLUS, t_MINUS, 
+    t_MULTIPLY, t_DIVIDE, t_MODULO, t_BITWISE_AND, t_BITWISE_OR, 
+    t_BITWISE_XOR, t_BITWISE_NOT, t_LOGICAL_NOT
+)
 
 # Global variables for the parser
-current_document = None
+current_library = None
 current_tokens = []
 
 # SystemVerilog tokens (extends Verilog tokens)
-tokens = verilog_tokens + (
+tokens = verilog_tokens + [
     'INTERFACE',
     'ENDINTERFACE',
     'MODPORT',
-    'PACKAGE',
-    'ENDPACKAGE',
-    'IMPORT',
-    'EXPORT',
     'CLASS',
     'ENDCLASS',
     'LOGIC',
@@ -57,29 +70,19 @@ tokens = verilog_tokens + (
     'UNPACKED',
     'ALWAYS_FF',
     'ALWAYS_COMB',
-    'GENVAR',
-    'AUTOMATIC',
-    'QUESTION',
-    'APOSTROPHE',
-    'DOLLAR',
     'RAND',
     'VOID',
     'NEW',
     'RETURN',
-    'COLON_COLON'
-)
+    'APOSTROPHE'
+]
 
-# SystemVerilog reserved words (extends Verilog reserved words)
-reserved = dict(verilog_reserved, **{
+# SystemVerilog extends Verilog keywords
+reserved = dict(verilog_keywords, **{
+    # SystemVerilog-specific keywords
     'interface': 'INTERFACE',
     'endinterface': 'ENDINTERFACE',
     'modport': 'MODPORT',
-    'package': 'PACKAGE',
-    'endpackage': 'ENDPACKAGE',
-    'import': 'IMPORT',
-    'export': 'EXPORT',
-    'class': 'CLASS',
-    'endclass': 'ENDCLASS',
     'logic': 'LOGIC',
     'bit': 'BIT',
     'byte': 'BYTE',
@@ -90,35 +93,90 @@ reserved = dict(verilog_reserved, **{
     'string': 'STRING',
     'chandle': 'CHANDLE',
     'event': 'EVENT',
+    'class': 'CLASS',
+    'endclass': 'ENDCLASS',
+    'extends': 'EXTENDS',
+    'implements': 'IMPLEMENTS',
     'virtual': 'VIRTUAL',
+    'pure': 'PURE',
+    'extern': 'EXTERN',
+    'static': 'STATIC',
+    'protected': 'PROTECTED',
+    'local': 'LOCAL',
+    'const': 'CONST',
+    'ref': 'REF',
     'typedef': 'TYPEDEF',
     'enum': 'ENUM',
     'struct': 'STRUCT',
     'union': 'UNION',
     'packed': 'PACKED',
     'unpacked': 'UNPACKED',
+    'tagged': 'TAGGED',
+    'alias': 'ALIAS',
     'always_ff': 'ALWAYS_FF',
     'always_comb': 'ALWAYS_COMB',
-    'genvar': 'GENVAR',
-    'automatic': 'AUTOMATIC',
+    'always_latch': 'ALWAYS_LATCH',
+    'unique': 'UNIQUE',
+    'priority': 'PRIORITY',
+    'final': 'FINAL',
+    'iff': 'IFF',
+    'inside': 'INSIDE',
+    'dist': 'DIST',
+    'covergroup': 'COVERGROUP',
+    'endgroup': 'ENDGROUP',
+    'coverpoint': 'COVERPOINT',
+    'cross': 'CROSS',
+    'bins': 'BINS',
+    'illegal_bins': 'ILLEGAL_BINS',
+    'ignore_bins': 'IGNORE_BINS',
+    'wildcard': 'WILDCARD',
+    'with': 'WITH',
+    'matches': 'MATCHES',
+    'throughout': 'THROUGHOUT',
+    'within': 'WITHIN',
+    'intersect': 'INTERSECT',
+    'first_match': 'FIRST_MATCH',
+    'expect': 'EXPECT',
+    'assume': 'ASSUME',
+    'assert': 'ASSERT',
+    'cover': 'COVER',
+    'restrict': 'RESTRICT',
+    'property': 'PROPERTY',
+    'endproperty': 'ENDPROPERTY',
+    'sequence': 'SEQUENCE',
+    'endsequence': 'ENDSEQUENCE',
+    'clocking': 'CLOCKING',
+    'endclocking': 'ENDCLOCKING',
+    'default': 'DEFAULT',
+    'global': 'GLOBAL',
+    'soft': 'SOFT',
+    'solve': 'SOLVE',
+    'before': 'BEFORE',
+    'super': 'SUPER',
+    'this': 'THIS',
+    'randomize': 'RANDOMIZE',
     'rand': 'RAND',
-    'void': 'VOID',
+    'randc': 'RANDC',
+    'constraint': 'CONSTRAINT',
+    'endconstraint': 'ENDCONSTRAINT',
+    'foreach': 'FOREACH',
+    'return': 'RETURN',
+    'break': 'BREAK',
+    'continue': 'CONTINUE',
+    'do': 'DO',
+    'while': 'WHILE',
     'new': 'NEW',
-    'return': 'RETURN'
+    'null': 'NULL',
+    'void': 'VOID',
+    'type': 'TYPE',
+    'context': 'CONTEXT',
+    'pure': 'PURE',
+    'join_any': 'JOIN_ANY',
+    'join_none': 'JOIN_NONE',
+    'wait_order': 'WAIT_ORDER',
+    'mailbox': 'MAILBOX',
+    'semaphore': 'SEMAPHORE',
 })
-
-# Import all token functions from verilog_parser
-from .verilog_parser import (
-    t_SEMICOLON, t_COLON, t_COMMA, t_DOT, t_LPAREN, t_RPAREN,
-    t_LBRACKET, t_RBRACKET, t_LBRACE, t_RBRACE, t_AT, t_HASH,
-    t_SHIFT_LEFT, t_SHIFT_RIGHT, t_LOGICAL_AND, t_LOGICAL_OR,
-    t_EQUAL, t_NOT_EQUAL, t_GREATER_EQUAL, t_ASSIGN, t_LESS_THAN,
-    t_GREATER_THAN, t_PLUS, t_MINUS, t_MULTIPLY, t_DIVIDE, t_MODULO,
-    t_BITWISE_AND, t_BITWISE_OR, t_BITWISE_XOR, t_BITWISE_NOT,
-    t_LOGICAL_NOT, t_NON_BLOCKING_ASSIGN, t_ignore, t_COMMENT_BLOCK,
-    t_COMMENT_LINE, t_STRING_LITERAL, t_NUMBER, t_newline, t_error,
-    find_column
-)
 
 # Additional SystemVerilog-specific token rules
 t_QUESTION = r'\?'
@@ -160,7 +218,7 @@ def p_module_declaration(p):
     '''module_declaration : MODULE IDENTIFIER LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER module_parameters LPAREN port_list RPAREN SEMICOLON module_items ENDMODULE
                          | MODULE IDENTIFIER SEMICOLON module_items ENDMODULE'''
-    global current_document, current_tokens
+    global current_library, current_tokens
 
     module_name = p[2]
     module = SystemVerilogModule(module_name)
@@ -177,14 +235,14 @@ def p_module_declaration(p):
             for group in port_groups:
                 module.add_port_group(group)
 
-    if current_document:
-        current_document.add_design_unit(module)
+    if current_library:
+        current_library.add_design_unit(module)
 
 
 def p_interface_declaration(p):
     '''interface_declaration : INTERFACE IDENTIFIER LPAREN port_list RPAREN SEMICOLON interface_items ENDINTERFACE
                             | INTERFACE IDENTIFIER SEMICOLON interface_items ENDINTERFACE'''
-    global current_document, current_tokens
+    global current_library, current_tokens
 
     interface_name = p[2]
     interface = SystemVerilogInterface(interface_name)
@@ -195,19 +253,19 @@ def p_interface_declaration(p):
         for group in port_groups:
             interface.add_port_group(group)
 
-    if current_document:
-        current_document.add_design_unit(interface)
+    if current_library:
+        current_library.add_design_unit(interface)
 
 
 def p_package_declaration(p):
     '''package_declaration : PACKAGE IDENTIFIER SEMICOLON package_items ENDPACKAGE'''
-    global current_document
+    global current_library
 
     package_name = p[2]
     package = SystemVerilogPackage(package_name)
 
-    if current_document:
-        current_document.add_design_unit(package)
+    if current_library:
+        current_library.add_design_unit(package)
 
 
 def p_module_parameters(p):
@@ -626,7 +684,7 @@ def p_while_loop(p):
 
 
 def p_assign_statement(p):
-    '''assign_statement : ASSIGN_KW assignment_list SEMICOLON'''
+    '''assign_statement : ASSIGN assignment_list SEMICOLON'''
     pass
 
 
@@ -762,10 +820,10 @@ def p_binary_expression(p):
                         | expression MULTIPLY expression
                         | expression DIVIDE expression
                         | expression MODULO expression
-                        | expression EQUAL expression
-                        | expression NOT_EQUAL expression
-                        | expression LESS_THAN expression
-                        | expression GREATER_THAN expression
+                        | expression EQ expression
+                        | expression NE expression
+                        | expression LT expression
+                        | expression GT expression
                         | expression LOGICAL_AND expression
                         | expression LOGICAL_OR expression
                         | expression BITWISE_AND expression
@@ -867,11 +925,14 @@ def extract_port_groups(port_list, tokens):
     return port_groups
 
 
-def parse_systemverilog(filename: str, source_text: str, language: str) -> HDLDocument:
+def parse_systemverilog(filename: str, source_text: str, hdl_lrm) -> HDLLibrary:
     """Parse SystemVerilog source code"""
-    global current_document, current_tokens
+    global current_library, current_tokens
 
-    current_document = HDLDocument(filename, language)
+    # Convert HDL_LRM enum to string for library language field
+    language_str = hdl_lrm.value if hasattr(hdl_lrm, 'value') else str(hdl_lrm)
+    
+    current_library = HDLLibrary(filename, language_str)
     current_tokens = []
 
     try:
@@ -882,18 +943,18 @@ def parse_systemverilog(filename: str, source_text: str, language: str) -> HDLDo
         # Parse the source text
         result = parser.parse(source_text, lexer=lexer)
 
-        return current_document
+        return current_library
 
     except Exception as e:
         print(f"Error parsing SystemVerilog: {e}")
-        return current_document
+        return current_library
 
 
 class SystemVerilogParser(BaseHDLParser):
     """SystemVerilog Parser using PLY"""
 
-    def __init__(self, language: str):
-        super().__init__(language)
+    def __init__(self, hdl_lrm):
+        super().__init__(hdl_lrm)
 
     def _setup_lexer(self):
         """Setup SystemVerilog lexer"""
@@ -903,9 +964,9 @@ class SystemVerilogParser(BaseHDLParser):
         """Setup SystemVerilog parser"""
         self.parser = yacc.yacc(debug=False)
 
-    def parse(self, filename: str, source_text: str) -> HDLDocument:
+    def parse(self, filename: str, source_text: str, library_name: str = "work") -> HDLLibrary:
         """Parse SystemVerilog source code"""
-        return parse_systemverilog(filename, source_text, self.language)
+        return parse_systemverilog(filename, source_text, self.hdl_lrm)
 
 
 def p_hierarchical_identifier(p):
