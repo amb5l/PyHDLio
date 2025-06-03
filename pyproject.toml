@@ -35,6 +35,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["hdlio*"]
 
 [tool.mypy]
 python_version = "3.8"
