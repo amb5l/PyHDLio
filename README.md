@@ -1,8 +1,10 @@
 # PyHDLio
 
-An HDL parsing library using ANTLR4, packaged as the `hdlio` Python module.
+A Python HDL parsing library using ANTLR4.
 
 ## Installation
+
+To install from this repository, as an editable package:
 
 ```bash
 pip install -e .

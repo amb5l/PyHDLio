@@ -1,6 +1,6 @@
 from antlr4 import ParseTreeVisitor, Token
 from hdlio.grammar.vhdlParser import vhdlParser
-from .ast.ast import Generic, Port, PortGroup, Entity, VHDLModule
+from .ast import Generic, Port, PortGroup, Entity, VHDLAST
 import re
 
 class VHDLVisitor(ParseTreeVisitor):
@@ -54,15 +54,17 @@ class VHDLVisitor(ParseTreeVisitor):
         
         return formatted
     
-    def visitDesign_file(self, ctx: vhdlParser.Design_fileContext):
-        """Visit design file and extract all entities."""
+    def visitDesign_file(self, ctx):
+        """Visit design file and return VHDLAST with all entities."""
         entities = []
-        if ctx.design_unit():
-            for design_unit in ctx.design_unit():
-                entity = self.visit(design_unit)
-                if entity:
-                    entities.append(entity)
-        return VHDLModule(entities=entities)
+        
+        # Process each design unit in the file
+        for design_unit_ctx in ctx.design_unit():
+            entity = self.visit(design_unit_ctx)
+            if entity:
+                entities.append(entity)
+        
+        return VHDLAST(entities=entities)
 
     def visitDesign_unit(self, ctx: vhdlParser.Design_unitContext):
         """Visit design unit and extract entity if present."""

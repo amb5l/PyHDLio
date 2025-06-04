@@ -1,13 +1,18 @@
 # PyHDLio Examples
 
-This directory contains examples demonstrating PyHDLio functionality.
+This directory demonstrates PyHDLio's capabilities for VHDL parsing and analysis.
 
-## VHDL Entity Reporting
+## Simple Example (`simple/`)
 
-The `simple.py` example demonstrates how to:
-- Parse VHDL files into ASTs
-- Report entities with their generics and ports
-- Use both flat and grouped port reporting
+The simple example demonstrates both PyHDLio AST and pyVHDLModel approaches in a single comprehensive script:
+
+- **File**: `simple/simple.py`
+- **Features**: 
+  - PyHDLio AST parsing (lightweight, currently available)
+  - pyVHDLModel integration preview (rich semantics, future)
+  - Direct comparison of both approaches
+  - Programmatic access examples
+  - Error handling demonstration
 
 ### Running the Example
 
@@ -18,23 +23,51 @@ python simple.py
 
 ### Expected Output
 
+The example produces detailed output showing both approaches:
+
+1. **PyHDLio AST Approach**: Current implementation with formatted reports and programmatic access
+2. **pyVHDLModel Approach**: Preview of planned integration with rich object hierarchy
+3. **Comparison**: Side-by-side analysis of benefits and use cases
+
+### Features Demonstrated
+
+- **Entity Parsing**: Extract entity names, generics, and ports
+- **Port Grouping**: Group ports based on source code proximity (blank lines)
+- **Dual Access**: Both lightweight AST and rich object model approaches
+- **Error Handling**: Graceful handling of file and syntax errors
+- **Programmatic Access**: Direct manipulation of parsed structures
+- **Comparison**: Clear guidance on when to use each approach
+
+### VHDL Test File
+
+The example uses `simple.vhd` with:
+- Entity with generics (WIDTH, DEPTH)
+- Grouped ports (control signals + data signals)
+- Proper VHDL structure for testing
+
+## Prerequisites
+
+```bash
+# Install PyHDLio in development mode
+pip install -e ./PyHDLio
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Activate virtual environment
+.venv\Scripts\Activate.ps1  # Windows
+source .venv/bin/activate    # Linux/Mac
 ```
-Entity: counter
-  Generics:
-      None
-  Ports (flat):
-      - clk: in STD_LOGIC
-      - reset: in STD_LOGIC
-      - start: in STD_LOGIC_VECTOR(3 downto 0)
-      - count: out STD_LOGIC_VECTOR(3 downto 0)
-  Ports (grouped):
-    Group 1:
-      - clk: in STD_LOGIC
-      - reset: in STD_LOGIC
-    Group 2:
-      - start: in STD_LOGIC_VECTOR(3 downto 0)
-      - count: out STD_LOGIC_VECTOR(3 downto 0)
-```
+
+## Development Notes
+
+This example serves multiple purposes:
+- **Learning Tool**: Understand PyHDLio's capabilities
+- **Integration Preview**: See planned pyVHDLModel integration
+- **Decision Guide**: Choose the right approach for your needs
+- **Testing**: Verify PyHDLio functionality
+
+The unified approach demonstrates that both PyHDLio AST and pyVHDLModel can coexist and complement each other, with users choosing the appropriate tool for their specific requirements.
 
 ## Available Examples
 
@@ -132,27 +165,6 @@ for entity in module.entities:
         for port in group.ports:
             print(f"    - {port.name}: {port.direction} {port.type}")
 ```
-
-## Prerequisites
-
-1. **Install PyHDLio in development mode:**
-   ```bash
-   pip install -e ./PyHDLio
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Activate virtual environment:**
-   ```bash
-   # Windows
-   .venv\Scripts\Activate.ps1
-   
-   # Linux/Mac
-   source .venv/bin/activate
-   ```
 
 ## Adding New Examples
 

@@ -1,7 +1,10 @@
+"""VHDL Parser Module"""
+
 from antlr4 import *
 from antlr4.error.ErrorListener import ErrorListener
 from hdlio.grammar.vhdlLexer import vhdlLexer
 from hdlio.grammar.vhdlParser import vhdlParser
+from .ast import VHDLAST
 
 class VHDLSyntaxError(Exception):
     """Exception raised for VHDL syntax errors."""
@@ -9,11 +12,11 @@ class VHDLSyntaxError(Exception):
 
 class VHDLErrorListener(ErrorListener):
     """Custom error listener for VHDL parsing."""
-    
+
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
         raise VHDLSyntaxError(f"Syntax error at line {line}, column {column}: {msg}")
 
-def parse_vhdl(file_path, mode='tree'):
+def parse_vhdl(file_path: str, mode: str = 'tree'):
     """Parse a VHDL file and return parse tree or AST.
 
     Args:
@@ -21,7 +24,7 @@ def parse_vhdl(file_path, mode='tree'):
         mode (str): 'tree' for string representation, 'ast' for structured AST
 
     Returns:
-        str | VHDLModule: Parse tree string or VHDLModule AST
+        str | VHDLAST: Parse tree string or VHDLAST
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -35,7 +38,7 @@ def parse_vhdl(file_path, mode='tree'):
     lexer = vhdlLexer(input_stream)
     stream = CommonTokenStream(lexer)
     parser = vhdlParser(stream)
-    
+
     # Add custom error handling
     parser.removeErrorListeners()
     parser.addErrorListener(VHDLErrorListener())
@@ -49,15 +52,13 @@ def parse_vhdl(file_path, mode='tree'):
         # Import here to handle both module and direct script execution
         try:
             from .visitor import VHDLVisitor
-            from .ast.ast import VHDLModule
         except ImportError:
             # Handle direct script execution
             from visitor import VHDLVisitor
-            from ast.ast import VHDLModule
-        
+
         visitor = VHDLVisitor()
         return visitor.visit(tree)
-    
+
     return tree.toStringTree(recog=parser)
 
 if __name__ == "__main__":
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python parse_vhdl.py <vhdl_file>")
         sys.exit(1)
-    
+
     try:
         result = parse_vhdl(sys.argv[1], mode='ast')
         print(f"Parsed module: {result}")

@@ -1,15 +1,48 @@
-from .ast.ast import VHDLModule, Entity, Generic, Port, PortGroup
+from typing import overload, Union
+from .ast import VHDLAST, Entity, Generic, Port, PortGroup
 
-def report_generics(entity: Entity, indent: int = 2) -> str:
+# pyVHDLModel imports (optional - only if available)
+try:
+    from pyVHDLModel.DesignUnit import Entity as PyVHDLModelEntity
+    from pyVHDLModel.Interface import GenericConstantInterfaceItem, PortSignalInterfaceItem, PortGroup as PyVHDLModelPortGroup
+    PYVHDLMODEL_AVAILABLE = True
+except ImportError:
+    # Create placeholder types for type hints when pyVHDLModel is not available
+    PyVHDLModelEntity = None
+    GenericConstantInterfaceItem = None
+    PortSignalInterfaceItem = None
+    PyVHDLModelPortGroup = None
+    PYVHDLMODEL_AVAILABLE = False
+
+
+# Type aliases for cleaner code
+EntityType = Union[Entity, 'PyVHDLModelEntity'] if PYVHDLMODEL_AVAILABLE else Entity
+
+
+@overload
+def report_generics(entity: Entity, indent: int = 2) -> str: ...
+
+@overload
+def report_generics(entity: 'PyVHDLModelEntity', indent: int = 2) -> str: ...
+
+def report_generics(entity: EntityType, indent: int = 2) -> str:
     """Generate formatted report of entity generics.
 
     Args:
-        entity: Entity to report
+        entity: Entity to report (PyHDLio AST or pyVHDLModel)
         indent: Number of spaces for indentation
 
     Returns:
         Formatted string report of generics
     """
+    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+        return _report_pyvhdlmodel_generics(entity, indent)
+    else:
+        return _report_ast_generics(entity, indent)
+
+
+def _report_ast_generics(entity: Entity, indent: int = 2) -> str:
+    """Generate formatted report of PyHDLio AST entity generics."""
     istr = " " * indent
     output = [f"{istr}Generics:"]
     if entity.generics:
@@ -20,16 +53,51 @@ def report_generics(entity: Entity, indent: int = 2) -> str:
         output.append(f"{istr}    None")
     return "\n".join(output)
 
-def report_ports_flat(entity: Entity, indent: int = 2) -> str:
+
+def _report_pyvhdlmodel_generics(entity: 'PyVHDLModelEntity', indent: int = 2) -> str:
+    """Generate formatted report of pyVHDLModel entity generics."""
+    istr = " " * indent
+    output = [f"{istr}Generics:"]
+    if entity.GenericItems:
+        for generic in entity.GenericItems:
+            name = generic.Identifiers[0] if generic.Identifiers else "unknown"
+            # Try to get our stored type string, fallback to str(Subtype)
+            # Check for None instead of truthiness since unresolved symbols return False
+            if generic.Subtype is not None and hasattr(generic.Subtype, '_typeString'):
+                type_str = generic.Subtype._typeString
+            else:
+                type_str = str(generic.Subtype) if generic.Subtype else "unknown"
+            default = f" = {generic.DefaultExpression}" if generic.DefaultExpression else ""
+            output.append(f"{istr}    - {name}: {type_str}{default}")
+    else:
+        output.append(f"{istr}    None")
+    return "\n".join(output)
+
+
+@overload
+def report_ports_flat(entity: Entity, indent: int = 2) -> str: ...
+
+@overload
+def report_ports_flat(entity: 'PyVHDLModelEntity', indent: int = 2) -> str: ...
+
+def report_ports_flat(entity: EntityType, indent: int = 2) -> str:
     """Generate formatted report of entity ports in flat format.
 
     Args:
-        entity: Entity to report
+        entity: Entity to report (PyHDLio AST or pyVHDLModel)
         indent: Number of spaces for indentation
 
     Returns:
         Formatted string report of ports
     """
+    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+        return _report_pyvhdlmodel_ports_flat(entity, indent)
+    else:
+        return _report_ast_ports_flat(entity, indent)
+
+
+def _report_ast_ports_flat(entity: Entity, indent: int = 2) -> str:
+    """Generate formatted report of PyHDLio AST entity ports in flat format."""
     istr = " " * indent
     output = [f"{istr}Ports (flat):"]
     if entity.ports:
@@ -40,16 +108,51 @@ def report_ports_flat(entity: Entity, indent: int = 2) -> str:
         output.append(f"{istr}    None")
     return "\n".join(output)
 
-def report_ports_grouped(entity: Entity, indent: int = 2) -> str:
+
+def _report_pyvhdlmodel_ports_flat(entity: 'PyVHDLModelEntity', indent: int = 2) -> str:
+    """Generate formatted report of pyVHDLModel entity ports in flat format."""
+    istr = " " * indent
+    output = [f"{istr}Ports (flat):"]
+    if entity.PortItems:
+        for port in entity.PortItems:
+            name = port.Identifiers[0] if port.Identifiers else "unknown"
+            direction = port.Mode.name.lower() if port.Mode else "unknown"
+            # Try to get our stored type string, fallback to str(Subtype)
+            # Check for None instead of truthiness since unresolved symbols return False
+            if port.Subtype is not None and hasattr(port.Subtype, '_typeString'):
+                type_str = port.Subtype._typeString
+            else:
+                type_str = str(port.Subtype) if port.Subtype else "unknown"
+            output.append(f"{istr}    - {name}: {direction} {type_str}")
+    else:
+        output.append(f"{istr}    None")
+    return "\n".join(output)
+
+
+@overload
+def report_ports_grouped(entity: Entity, indent: int = 2) -> str: ...
+
+@overload
+def report_ports_grouped(entity: 'PyVHDLModelEntity', indent: int = 2) -> str: ...
+
+def report_ports_grouped(entity: EntityType, indent: int = 2) -> str:
     """Generate formatted report of entity ports in grouped format.
 
     Args:
-        entity: Entity to report
+        entity: Entity to report (PyHDLio AST or pyVHDLModel)
         indent: Number of spaces for indentation
 
     Returns:
         Formatted string report of grouped ports
     """
+    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+        return _report_pyvhdlmodel_ports_grouped(entity, indent)
+    else:
+        return _report_ast_ports_grouped(entity, indent)
+
+
+def _report_ast_ports_grouped(entity: Entity, indent: int = 2) -> str:
+    """Generate formatted report of PyHDLio AST entity ports in grouped format."""
     istr = " " * indent
     output = [f"{istr}Ports (grouped):"]
     if entity.port_groups:
@@ -62,24 +165,61 @@ def report_ports_grouped(entity: Entity, indent: int = 2) -> str:
         output.append(f"{istr}    None")
     return "\n".join(output)
 
-def report_entity(entity: Entity, indent: int = 0) -> str:
+
+def _report_pyvhdlmodel_ports_grouped(entity: 'PyVHDLModelEntity', indent: int = 2) -> str:
+    """Generate formatted report of pyVHDLModel entity ports in grouped format."""
+    istr = " " * indent
+    output = [f"{istr}Ports (grouped):"]
+    if entity.PortGroups:
+        for i, group in enumerate(entity.PortGroups, 1):
+            output.append(f"{istr}  Group {i}:")
+            for port in group.PortItems:
+                name = port.Identifiers[0] if port.Identifiers else "unknown"
+                direction = port.Mode.name.lower() if port.Mode else "unknown"
+                # Try to get our stored type string, fallback to str(Subtype)
+                # Check for None instead of truthiness since unresolved symbols return False
+                if port.Subtype is not None and hasattr(port.Subtype, '_typeString'):
+                    type_str = port.Subtype._typeString
+                else:
+                    type_str = str(port.Subtype) if port.Subtype else "unknown"
+                output.append(f"{istr}    - {name}: {direction} {type_str}")
+    else:
+        output.append(f"{istr}    None")
+    return "\n".join(output)
+
+
+@overload
+def report_entity(entity: Entity, indent: int = 0) -> str: ...
+
+@overload
+def report_entity(entity: 'PyVHDLModelEntity', indent: int = 0) -> str: ...
+
+def report_entity(entity: EntityType, indent: int = 0) -> str:
     """Generate complete formatted report of an entity.
 
     Args:
-        entity: Entity to report
+        entity: Entity to report (PyHDLio AST or pyVHDLModel)
         indent: Number of spaces for indentation
 
     Returns:
         Formatted string report of the entity
     """
     istr = " " * indent
-    output = [f"{istr}Entity: {entity.name}"]
+
+    # Get entity name
+    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+        entity_name = entity.Identifier
+    else:
+        entity_name = entity.name
+
+    output = [f"{istr}Entity: {entity_name}"]
     output.append(report_generics(entity, indent + 2))
     output.append(report_ports_flat(entity, indent + 2))
     output.append(report_ports_grouped(entity, indent + 2))
     return "\n".join(output)
 
-def report_entities(module: VHDLModule) -> str:
+
+def report_entities(module: VHDLAST) -> str:
     """Generate formatted report of entities.
 
     Args:
@@ -92,5 +232,23 @@ def report_entities(module: VHDLModule) -> str:
         return "No entities found."
     output = []
     for entity in module.entities:
+        output.append(report_entity(entity))
+    return "\n".join(output)
+
+
+# Additional utility functions for pyVHDLModel
+def report_pyvhdlmodel_entities(entities: list) -> str:
+    """Generate formatted report of pyVHDLModel entities.
+
+    Args:
+        entities: List of pyVHDLModel Entity objects
+
+    Returns:
+        Formatted string report
+    """
+    if not entities:
+        return "No entities found."
+    output = []
+    for entity in entities:
         output.append(report_entity(entity))
     return "\n".join(output)
