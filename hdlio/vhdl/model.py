@@ -24,141 +24,253 @@ Examples:
     ast = VHDLAST.from_file("counter.vhd")
 """
 
-from typing import Union, Optional
+from typing import Union, Optional, List
 from pathlib import Path
 
-# Import parsing functionality
-from .parse_vhdl import VHDLSyntaxError
-from .converters.pyvhdlmodel_converter import convert_to_pyvhdlmodel
+# Import AST classes and exceptions
+from .ast import VHDLAST, VHDLSyntaxError
 
-# Import AST classes
-from .ast import VHDLAST
+# Import pyVHDLModel classes (required)
+from pyVHDLModel import Document as BaseDocument
+from pyVHDLModel.DesignUnit import Entity
+from pyVHDLModel.Interface import (
+    GenericConstantInterfaceItem,
+    PortSignalInterfaceItem,
+    PortGroup
+)
+from pyVHDLModel.Base import Mode
+from pyVHDLModel.Expression import IntegerLiteral, EnumerationLiteral, StringLiteral
+from pyVHDLModel.Symbol import SimpleSubtypeSymbol
+from pyVHDLModel.Name import SimpleName
 
-# Import pyVHDLModel classes if available
-try:
-    from pyVHDLModel import Document as BaseDocument
-    from pyVHDLModel.DesignUnit import Entity
-    from pyVHDLModel.Interface import (
-        GenericConstantInterfaceItem,
-        PortSignalInterfaceItem,
-        PortGroup
-    )
-    from pyVHDLModel.Base import Mode
-    PYVHDLMODEL_AVAILABLE = True
-except ImportError:
-    BaseDocument = None
-    Entity = None
-    GenericConstantInterfaceItem = None
-    PortSignalInterfaceItem = None
-    PortGroup = None
-    Mode = None
-    PYVHDLMODEL_AVAILABLE = False
+class Document(BaseDocument):
+    """
+    Enhanced pyVHDLModel Document with integrated parsing functionality.
 
+    This class extends the base pyVHDLModel Document with convenient class methods
+    for parsing VHDL directly from strings or files into pyVHDLModel objects.
+    """
 
-if PYVHDLMODEL_AVAILABLE:
-    class Document(BaseDocument):
+    @classmethod
+    def from_string(cls, vhdl_code: str, filename: Optional[str] = None) -> 'Document':
         """
-        Enhanced pyVHDLModel Document with integrated parsing functionality.
+        Parse VHDL code from a string and return a pyVHDLModel Document instance.
 
-        This class extends the base pyVHDLModel Document with convenient class methods
-        for parsing VHDL directly from strings or files into pyVHDLModel objects.
+        Args:
+            vhdl_code: VHDL source code as a string
+            filename: Optional filename to associate with the document
+
+        Returns:
+            Document instance containing the parsed design units
+
+        Raises:
+            VHDLSyntaxError: If parsing fails
         """
+        # First parse to PyHDLio AST
+        ast = VHDLAST.from_string(vhdl_code)
 
-        @classmethod
-        def from_string(cls, vhdl_code: str, filename: Optional[str] = None) -> 'Document':
-            """
-            Parse VHDL code from a string and return a pyVHDLModel Document instance.
+        # Set filename if provided
+        if filename:
+            ast.filename = filename
 
-            Args:
-                vhdl_code: VHDL source code as a string
-                filename: Optional filename to associate with the document
+        # Convert to pyVHDLModel Document
+        return cls.from_ast(ast)
 
-            Returns:
-                Document instance containing the parsed design units
+    @classmethod
+    def from_file(cls, file_path: Union[str, Path]) -> 'Document':
+        """
+        Parse a VHDL file and return a pyVHDLModel Document instance.
 
-            Raises:
-                VHDLSyntaxError: If parsing fails
-            """
-            # First parse to PyHDLio AST
-            ast = VHDLAST.from_string(vhdl_code)
+        Args:
+            file_path: Path to the VHDL file to parse
 
-            # Set filename if provided
-            if filename:
-                ast.filename = filename
+        Returns:
+            Document instance containing the parsed design units
 
-            # Convert to pyVHDLModel Document
-            return convert_to_pyvhdlmodel(ast)
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            VHDLSyntaxError: If parsing fails
+        """
+        # Read file and parse as string
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"VHDL file not found: {file_path}")
 
-        @classmethod
-        def from_file(cls, file_path: Union[str, Path]) -> 'Document':
-            """
-            Parse a VHDL file and return a pyVHDLModel Document instance.
+        vhdl_code = file_path.read_text(encoding='utf-8')
+        return cls.from_string(vhdl_code, filename=str(file_path))
 
-            Args:
-                file_path: Path to the VHDL file to parse
+    @classmethod
+    def from_ast(cls, ast: VHDLAST) -> 'Document':
+        """
+        Convert a PyHDLio VHDLAST to a pyVHDLModel Document instance.
 
-            Returns:
-                Document instance containing the parsed design units
+        Args:
+            ast: PyHDLio VHDLAST instance to convert
 
-            Raises:
-                FileNotFoundError: If the file doesn't exist
-                VHDLSyntaxError: If parsing fails
-            """
-            # Read file and parse as string
-            file_path = Path(file_path)
-            if not file_path.exists():
-                raise FileNotFoundError(f"VHDL file not found: {file_path}")
+        Returns:
+            Document instance containing the converted design units
+        """
+        # Create a document - use the AST's filename if available, otherwise a default
+        doc_path = Path(ast.filename) if hasattr(ast, 'filename') and ast.filename else Path("converted.vhd")
+        document = cls(doc_path)
 
-            vhdl_code = file_path.read_text(encoding='utf-8')
-            return cls.from_string(vhdl_code, filename=str(file_path))
+        # Convert each entity
+        for entity in ast.entities:
+            pyvhdl_entity = cls._convert_entity(entity)
+            document._AddEntity(pyvhdl_entity)
 
-        @classmethod
-        def from_ast(cls, ast: VHDLAST) -> 'Document':
-            """
-            Convert a PyHDLio VHDLAST to a pyVHDLModel Document instance.
+        return document
 
-            Args:
-                ast: PyHDLio VHDLAST instance to convert
+    @staticmethod
+    def _convert_entity(pyhdlio_entity) -> Entity:
+        """Convert a PyHDLio Entity to a pyVHDLModel Entity."""
+        # Convert generics
+        generic_items = []
+        for generic in pyhdlio_entity.generics:
+            generic_item = Document._convert_generic(generic)
+            if generic_item:
+                generic_items.append(generic_item)
 
-            Returns:
-                Document instance containing the converted design units
-            """
-            return convert_to_pyvhdlmodel(ast)
-else:
-    # Create a placeholder class when pyVHDLModel is not available
-    class Document:
-        """Placeholder Document class - pyVHDLModel not available."""
+        # Convert ports
+        port_items = []
+        for port in pyhdlio_entity.ports:
+            port_item = Document._convert_port(port)
+            if port_item:
+                port_items.append(port_item)
 
-        @classmethod
-        def from_string(cls, vhdl_code: str, filename: Optional[str] = None):
-            raise ImportError("pyVHDLModel is not available. Install it to use Document class.")
+        # Create pyVHDLModel Entity
+        entity = Entity(
+            identifier=pyhdlio_entity.name,
+            genericItems=generic_items,
+            portItems=port_items
+        )
 
-        @classmethod
-        def from_file(cls, file_path: Union[str, Path]):
-            raise ImportError("pyVHDLModel is not available. Install it to use Document class.")
+        # Convert and populate port groups
+        port_groups = Document._convert_port_groups(pyhdlio_entity.port_groups, port_items)
+        entity._portGroups.extend(port_groups)
 
-        @classmethod
-        def from_ast(cls, ast: VHDLAST):
-            raise ImportError("pyVHDLModel is not available. Install it to use Document class.")
+        return entity
 
+    @staticmethod
+    def _convert_generic(pyhdlio_generic) -> Optional[GenericConstantInterfaceItem]:
+        """Convert a PyHDLio Generic to a pyVHDLModel GenericConstantInterfaceItem."""
+        try:
+            # Create a more informative subtype symbol
+            type_name = SimpleName(pyhdlio_generic.type)
+            type_symbol = SimpleSubtypeSymbol(type_name)
+
+            # Handle default value - convert to appropriate Expression
+            default_expr = None
+            if pyhdlio_generic.default_value:
+                default_expr = Document._convert_default_value(pyhdlio_generic.default_value)
+
+            generic_item = GenericConstantInterfaceItem(
+                identifiers=[pyhdlio_generic.name],
+                mode=Mode.In,  # Generics are always input mode
+                subtype=type_symbol,
+                defaultExpression=default_expr
+            )
+
+            return generic_item
+        except Exception as e:
+            print(f"Warning: Failed to convert generic '{pyhdlio_generic.name}': {e}")
+            return None
+
+    @staticmethod
+    def _convert_default_value(value_str: str):
+        """Convert a default value string to an appropriate Expression."""
+        if not value_str:
+            return None
+
+        value_str = value_str.strip()
+
+        # Try to parse as integer
+        try:
+            int_val = int(value_str)
+            return IntegerLiteral(int_val)
+        except ValueError:
+            pass
+
+        # If it's quoted, treat as string literal
+        if value_str.startswith('"') and value_str.endswith('"'):
+            return StringLiteral(value_str[1:-1])  # Remove quotes
+
+        # Otherwise treat as enumeration literal (identifier)
+        return EnumerationLiteral(value_str)
+
+    @staticmethod
+    def _convert_port(pyhdlio_port) -> Optional[PortSignalInterfaceItem]:
+        """Convert a PyHDLio Port to a pyVHDLModel PortSignalInterfaceItem."""
+        try:
+            # Map direction to Mode
+            mode_mapping = {
+                'in': Mode.In,
+                'out': Mode.Out,
+                'inout': Mode.InOut,
+                'buffer': Mode.Buffer,
+                'linkage': Mode.Linkage
+            }
+            mode = mode_mapping.get(pyhdlio_port.direction.lower(), Mode.In)
+
+            # Create type symbol - combine type and constraint if present
+            type_str = pyhdlio_port.type
+            if pyhdlio_port.constraint:
+                type_str = f"{type_str}{pyhdlio_port.constraint}"
+
+            type_name = SimpleName(type_str)
+            type_symbol = SimpleSubtypeSymbol(type_name)
+
+            port_item = PortSignalInterfaceItem(
+                identifiers=[pyhdlio_port.name],
+                mode=mode,
+                subtype=type_symbol
+            )
+
+            return port_item
+        except Exception as e:
+            print(f"Warning: Failed to convert port '{pyhdlio_port.name}': {e}")
+            return None
+
+    @staticmethod
+    def _convert_port_groups(pyhdlio_port_groups: List, pyvhdlmodel_ports: List) -> List[PortGroup]:
+        """Convert PyHDLio PortGroups to pyVHDLModel PortGroups."""
+        port_groups = []
+
+        # Create a mapping from port names to pyVHDLModel port objects
+        port_name_to_obj = {}
+        for port_obj in pyvhdlmodel_ports:
+            # PortSignalInterfaceItem has identifiers list
+            if hasattr(port_obj, '_identifiers') and port_obj._identifiers:
+                port_name_to_obj[port_obj._identifiers[0]] = port_obj
+
+        # Convert each PyHDLio port group
+        for pyhdlio_group in pyhdlio_port_groups:
+            group_ports = []
+
+            for pyhdlio_port in pyhdlio_group.ports:
+                pyvhdlmodel_port = port_name_to_obj.get(pyhdlio_port.name)
+                if pyvhdlmodel_port:
+                    group_ports.append(pyvhdlmodel_port)
+                else:
+                    print(f"Warning: Port '{pyhdlio_port.name}' not found in converted ports")
+
+            if group_ports:
+                try:
+                    port_group = PortGroup(ports=group_ports, name=pyhdlio_group.name)
+                    port_groups.append(port_group)
+                except Exception as e:
+                    print(f"Warning: Failed to create PortGroup: {e}")
+
+        return port_groups
 
 # Re-export commonly used classes for convenience
 __all__ = [
     'VHDLAST',
     'Document',
     'VHDLSyntaxError',
+    'Entity',
+    'GenericConstantInterfaceItem',
+    'PortSignalInterfaceItem',
+    'PortGroup',
+    'Mode',
 ]
-
-# Conditionally add pyVHDLModel exports
-if PYVHDLMODEL_AVAILABLE:
-    __all__.extend([
-        'Entity',
-        'GenericConstantInterfaceItem',
-        'PortSignalInterfaceItem',
-        'PortGroup',
-        'Mode',
-    ])
-
-
-# Export the parsing error for user convenience
-from .parse_vhdl import VHDLSyntaxError

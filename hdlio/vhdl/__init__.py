@@ -1,4 +1,4 @@
-from .ast import VHDLAST, Entity, Generic, Port, PortGroup
+from .ast import VHDLAST, Entity, Generic, Port, PortGroup, VHDLSyntaxError
 from .visitor import VHDLVisitor
 from .reporter import report_entities, report_entity, report_generics, report_ports_flat, report_ports_grouped
 

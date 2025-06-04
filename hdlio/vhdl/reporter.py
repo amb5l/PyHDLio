@@ -1,22 +1,12 @@
 from typing import overload, Union
 from .ast import VHDLAST, Entity, Generic, Port, PortGroup
 
-# pyVHDLModel imports (optional - only if available)
-try:
-    from pyVHDLModel.DesignUnit import Entity as PyVHDLModelEntity
-    from pyVHDLModel.Interface import GenericConstantInterfaceItem, PortSignalInterfaceItem, PortGroup as PyVHDLModelPortGroup
-    PYVHDLMODEL_AVAILABLE = True
-except ImportError:
-    # Create placeholder types for type hints when pyVHDLModel is not available
-    PyVHDLModelEntity = None
-    GenericConstantInterfaceItem = None
-    PortSignalInterfaceItem = None
-    PyVHDLModelPortGroup = None
-    PYVHDLMODEL_AVAILABLE = False
-
+# pyVHDLModel imports (required)
+from pyVHDLModel.DesignUnit import Entity as PyVHDLModelEntity
+from pyVHDLModel.Interface import GenericConstantInterfaceItem, PortSignalInterfaceItem, PortGroup as PyVHDLModelPortGroup
 
 # Type aliases for cleaner code
-EntityType = Union[Entity, 'PyVHDLModelEntity'] if PYVHDLMODEL_AVAILABLE else Entity
+EntityType = Union[Entity, 'PyVHDLModelEntity']
 
 
 @overload
@@ -35,7 +25,7 @@ def report_generics(entity: EntityType, indent: int = 2) -> str:
     Returns:
         Formatted string report of generics
     """
-    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+    if isinstance(entity, PyVHDLModelEntity):
         return _report_pyvhdlmodel_generics(entity, indent)
     else:
         return _report_ast_generics(entity, indent)
@@ -90,7 +80,7 @@ def report_ports_flat(entity: EntityType, indent: int = 2) -> str:
     Returns:
         Formatted string report of ports
     """
-    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+    if isinstance(entity, PyVHDLModelEntity):
         return _report_pyvhdlmodel_ports_flat(entity, indent)
     else:
         return _report_ast_ports_flat(entity, indent)
@@ -145,7 +135,7 @@ def report_ports_grouped(entity: EntityType, indent: int = 2) -> str:
     Returns:
         Formatted string report of grouped ports
     """
-    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+    if isinstance(entity, PyVHDLModelEntity):
         return _report_pyvhdlmodel_ports_grouped(entity, indent)
     else:
         return _report_ast_ports_grouped(entity, indent)
@@ -207,7 +197,7 @@ def report_entity(entity: EntityType, indent: int = 0) -> str:
     istr = " " * indent
 
     # Get entity name
-    if PYVHDLMODEL_AVAILABLE and isinstance(entity, PyVHDLModelEntity):
+    if isinstance(entity, PyVHDLModelEntity):
         entity_name = entity.Identifier
     else:
         entity_name = entity.name

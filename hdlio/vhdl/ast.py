@@ -9,6 +9,12 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 from pathlib import Path
 
+
+class VHDLSyntaxError(Exception):
+    """Exception raised for VHDL syntax errors."""
+    pass
+
+
 @dataclass
 class Generic:
     """Represents a VHDL generic parameter."""
@@ -42,55 +48,72 @@ class Entity:
 class VHDLAST:
     """
     Enhanced VHDLAST with integrated parsing functionality.
-    
+
     This class represents a parsed VHDL file with multiple design units
-    and provides convenient class methods for parsing VHDL directly 
+    and provides convenient class methods for parsing VHDL directly
     from strings or files.
     """
     entities: List[Entity]
-    
+
     @classmethod
     def from_string(cls, vhdl_code: str) -> 'VHDLAST':
         """
         Parse VHDL code from a string and return a VHDLAST instance.
-        
+
         Args:
             vhdl_code: VHDL source code as a string
-            
+
         Returns:
             VHDLAST instance containing the parsed entities
-            
+
         Raises:
             VHDLSyntaxError: If parsing fails
         """
-        # Import here to avoid circular imports
-        from .parse_vhdl import parse_vhdl
-        
-        # Create a temporary file for the VHDL code since the parser expects a file
-        import tempfile
-        import os
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.vhd', delete=False) as f:
-            f.write(vhdl_code)
-            temp_path = f.name
-        
+        # Import ANTLR classes
+        from antlr4 import InputStream, CommonTokenStream
+        from antlr4.error.ErrorListener import ErrorListener
+        from hdlio.grammar.vhdlLexer import vhdlLexer
+        from hdlio.grammar.vhdlParser import vhdlParser
+        from .visitor import VHDLVisitor
+
+        # Custom error listener for VHDL parsing
+        class VHDLErrorListener(ErrorListener):
+            def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
+                raise VHDLSyntaxError(f"Syntax error at line {line}, column {column}: {msg}")
+
+        # Create input stream from string
+        input_stream = InputStream(vhdl_code)
+
+        # Set up lexer and parser
+        lexer = vhdlLexer(input_stream)
+        stream = CommonTokenStream(lexer)
+        parser = vhdlParser(stream)
+
+        # Add custom error handling
+        parser.removeErrorListeners()
+        parser.addErrorListener(VHDLErrorListener())
+
         try:
-            return parse_vhdl(temp_path, mode='ast')
-        finally:
-            # Clean up the temporary file
-            os.unlink(temp_path)
-    
+            # Parse the VHDL code
+            tree = parser.design_file()
+        except Exception as e:
+            raise VHDLSyntaxError(f"Failed to parse VHDL code: {str(e)}")
+
+        # Convert parse tree to AST using visitor
+        visitor = VHDLVisitor()
+        return visitor.visit(tree)
+
     @classmethod
     def from_file(cls, file_path: Union[str, Path]) -> 'VHDLAST':
         """
         Parse a VHDL file and return a VHDLAST instance.
-        
+
         Args:
             file_path: Path to the VHDL file to parse
-            
+
         Returns:
             VHDLAST instance containing the parsed entities
-            
+
         Raises:
             FileNotFoundError: If the file doesn't exist
             VHDLSyntaxError: If parsing fails
@@ -99,10 +122,10 @@ class VHDLAST:
         file_path = Path(file_path)
         if not file_path.exists():
             raise FileNotFoundError(f"VHDL file not found: {file_path}")
-        
+
         vhdl_code = file_path.read_text(encoding='utf-8')
         ast = cls.from_string(vhdl_code)
-        
+
         # Set the filename attribute for reference
         ast.filename = str(file_path)
         return ast
