@@ -7,7 +7,7 @@ This directory demonstrates PyHDLio's capabilities for VHDL parsing and analysis
 The simple example demonstrates both PyHDLio AST and pyVHDLModel approaches in a single comprehensive script:
 
 - **File**: `simple/simple.py`
-- **Features**: 
+- **Features**:
   - PyHDLio AST parsing (lightweight, currently available)
   - pyVHDLModel integration preview (rich semantics, future)
   - Direct comparison of both approaches
@@ -84,11 +84,11 @@ The unified approach demonstrates that both PyHDLio AST and pyVHDLModel can coex
 - Extract entity names, generics, and ports
 - Handle both simple and complex entity declarations
 
-### Entity Reporting
-- **Flat Mode**: Display all ports in a simple list
-- **Grouped Mode**: Display ports grouped by source proximity (blank lines or whitespace gaps separate groups)
-- Clean, readable output format
-- Support for entities with or without generics/ports
+### Port Grouping
+- **Automatic Grouping**: Ports are automatically grouped based on source code proximity
+- **Flexible Access**: Access ports both as a flat list and as organized groups
+- **Clean Structure**: Maintains source code organization for better understanding
+- **Complete Information**: Includes generics, ports, and type constraints
 
 ### Error Handling
 - Graceful handling of file not found errors
@@ -100,19 +100,33 @@ The unified approach demonstrates that both PyHDLio AST and pyVHDLModel can coex
 ### Basic Usage Pattern
 
 ```python
-from hdlio.vhdl.parse_vhdl import parse_vhdl, VHDLSyntaxError
-from hdlio.vhdl.reporter import report_entities
+from pyhdlio.vhdl.model import VHDLAST, VHDLSyntaxError
 
 def main():
     vhdl_file = "path/to/your/file.vhd"
-    
+
     try:
         # Parse VHDL file into AST
-        module = parse_vhdl(vhdl_file, mode='ast')
-        
-        # Report all entities (shows generics, flat ports, and grouped ports)
-        print(report_entities(module))
-        
+        ast = VHDLAST.from_file(vhdl_file)
+
+        # Access and print entity information
+        for entity in ast.entities:
+            print(f"Entity: {entity.name}")
+
+            # Display generics
+            if entity.generics:
+                print("Generics:")
+                for generic in entity.generics:
+                    default = f" = {generic.default_value}" if generic.default_value else ""
+                    print(f"  {generic.name}: {generic.type}{default}")
+
+            # Display ports
+            if entity.ports:
+                print("Ports:")
+                for port in entity.ports:
+                    constraint = f" {port.constraint}" if port.constraint else ""
+                    print(f"  {port.name}: {port.direction} {port.type}{constraint}")
+
     except FileNotFoundError:
         print(f"Error: {vhdl_file} not found")
     except VHDLSyntaxError as e:
@@ -124,46 +138,73 @@ if __name__ == "__main__":
     main()
 ```
 
-### Advanced Usage - Modular Reporting
+### pyVHDLModel Integration
 
 ```python
-from hdlio.vhdl.parse_vhdl import parse_vhdl
-from hdlio.vhdl.reporter import report_generics, report_ports_flat, report_ports_grouped
+from pyhdlio.vhdl.model import Document, VHDLSyntaxError
 
-# Parse VHDL file
-module = parse_vhdl(vhdl_file, mode='ast')
-entity = module.entities[0]
+def main():
+    vhdl_file = "path/to/your/file.vhd"
 
-# Use individual reporting functions with custom indentation
-print(f"Entity: {entity.name}")
-print(report_generics(entity, indent=2))
-print(report_ports_flat(entity, indent=2))
-print(report_ports_grouped(entity, indent=2))
+    try:
+        # Parse directly to pyVHDLModel Document
+        document = Document.from_file(vhdl_file)
+
+        # Access entities through pyVHDLModel API
+        for entity in document.Entities.values():
+            print(f"Entity: {entity.Identifier}")
+
+            # Access generics
+            if entity.GenericItems:
+                print("Generics:")
+                for generic in entity.GenericItems:
+                    name = generic.Identifiers[0] if generic.Identifiers else "unnamed"
+                    print(f"  {name}: {generic.Subtype}")
+
+            # Access ports
+            if entity.PortItems:
+                print("Ports:")
+                for port in entity.PortItems:
+                    name = port.Identifiers[0] if port.Identifiers else "unnamed"
+                    print(f"  {name}: {port.Mode.name.lower()} {port.Subtype}")
+
+    except VHDLSyntaxError as e:
+        print(f"Syntax error: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+if __name__ == "__main__":
+    main()
 ```
 
-### AST Access
+### AST Access with Port Grouping
 
 ```python
+from pyhdlio.vhdl.model import VHDLAST
+
 # Parse into AST for programmatic access
-module = parse_vhdl(vhdl_file, mode='ast')
+ast = VHDLAST.from_file(vhdl_file)
 
 # Access entities
-for entity in module.entities:
+for entity in ast.entities:
     print(f"Entity: {entity.name}")
-    
+
     # Access generics
     for generic in entity.generics:
-        print(f"  Generic: {generic.name}: {generic.type} = {generic.default_value}")
-    
+        default = f" = {generic.default_value}" if generic.default_value else ""
+        print(f"  Generic: {generic.name}: {generic.type}{default}")
+
     # Access ports (flat list)
     for port in entity.ports:
-        print(f"  Port: {port.name}: {port.direction} {port.type}")
-    
-    # Access port groups
+        constraint = f" {port.constraint}" if port.constraint else ""
+        print(f"  Port: {port.name}: {port.direction} {port.type}{constraint}")
+
+    # Access port groups (grouped by proximity in source)
     for i, group in enumerate(entity.port_groups, 1):
         print(f"  Group {i}:")
         for port in group.ports:
-            print(f"    - {port.name}: {port.direction} {port.type}")
+            constraint = f" {port.constraint}" if port.constraint else ""
+            print(f"    - {port.name}: {port.direction} {port.type}{constraint}")
 ```
 
 ## Adding New Examples
@@ -180,4 +221,4 @@ When adding new examples:
 
 - **[Main README](../../README.md)** - Project overview and setup
 - **[Testing Guide](../../tests/README.md)** - Comprehensive testing instructions
-- **[Implementation Plan](../../doc/plan_1.md)** - Detailed development plan 
+- **[Implementation Plan](../../doc/plan_1.md)** - Detailed development plan

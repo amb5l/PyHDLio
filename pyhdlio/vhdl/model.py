@@ -8,7 +8,7 @@ Users should import from this module for the complete API, or from ast module fo
 
 Examples:
     # Recommended: Complete API from model module (re-exports VHDLAST from ast.py)
-    from hdlio.vhdl.model import Document, VHDLAST
+    from pyhdlio.vhdl.model import Document, VHDLAST
 
     # Parse directly to pyVHDLModel Document
     doc = Document.from_file("counter.vhd")
@@ -20,7 +20,7 @@ Examples:
     doc = Document.from_ast(ast)
 
     # Alternative: Direct AST import (VHDLAST actually lives here)
-    from hdlio.vhdl.ast import VHDLAST
+    from pyhdlio.vhdl.ast import VHDLAST
     ast = VHDLAST.from_file("counter.vhd")
 """
 

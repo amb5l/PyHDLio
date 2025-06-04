@@ -1,6 +1,6 @@
 import os, sys, traceback
 
-from hdlio.vhdl.model import Document, VHDLSyntaxError
+from pyhdlio.vhdl.model import Document, VHDLSyntaxError
 
 def main():
     vhdl_file = os.path.join(os.path.dirname(__file__), "simple.vhd")
@@ -8,9 +8,9 @@ def main():
         print(f"Error: VHDL file not found: {vhdl_file}")
         sys.exit(1)
     try:
-        # Updated to use consolidated API
+        # Create document from source file
         document = Document.from_file(vhdl_file)
-        
+
         for entity in document.Entities.values():
             print("Entity: ", entity.Identifier)
 

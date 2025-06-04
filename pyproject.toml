@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hdlio"
+name = "pyhdlio"
 version = "0.1.0"
-description = "VHDL parsing library using ANTLR4"
+description = "HDL input and output library"
 authors = [
     {name = "PyHDLio Contributors"}
 ]
@@ -35,7 +35,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["hdlio*"]
+include = ["pyhdlio*"]
 
 [tool.mypy]
 python_version = "3.8"

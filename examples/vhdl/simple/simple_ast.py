@@ -1,6 +1,6 @@
 import os, sys, traceback
 
-from hdlio.vhdl.model import VHDLAST, VHDLSyntaxError
+from pyhdlio.vhdl.model import VHDLAST, VHDLSyntaxError
 
 def main():
     vhdl_file = os.path.join(os.path.dirname(__file__), "simple.vhd")
@@ -8,7 +8,7 @@ def main():
         print(f"Error: VHDL file not found: {vhdl_file}")
         sys.exit(1)
     try:
-        # Updated to use consolidated API
+        # Create AST from source file
         ast = VHDLAST.from_file(vhdl_file)
 
         for entity in ast.entities:
