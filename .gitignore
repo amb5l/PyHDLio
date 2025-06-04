@@ -9,12 +9,8 @@ dist/
 *.tar.gz
 
 # ANTLR-generated files
-hdlio/grammar/*.tokens
-hdlio/grammar/*.interp
-hdlio/grammar/*Parser.py
-hdlio/grammar/*Lexer.py
-hdlio/grammar/*Listener.py
-hdlio/grammar/*Visitor.py
+pyhdlio/*/grammar/*.tokens
+pyhdlio/*/grammar/*.interp
 
 # IDE and editor files
 .vscode/

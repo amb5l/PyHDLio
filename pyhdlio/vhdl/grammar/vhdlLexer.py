@@ -1,4 +1,4 @@
-# Generated from PyHDLio/hdlio/grammar/vhdl.g4 by ANTLR 4.13.2
+# Generated from D:/work/PyHDLio-dev/tools/../PyHDLio/pyhdlio/vhdl/grammar/vhdl.g4 by ANTLR 4.13.2
 from antlr4 import *
 from io import StringIO
 import sys

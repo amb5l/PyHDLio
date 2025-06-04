@@ -1,5 +1,5 @@
 from antlr4 import ParseTreeVisitor, Token
-from pyhdlio.grammar.vhdlParser import vhdlParser
+from .grammar.vhdlParser import vhdlParser
 from .ast import Generic, Port, PortGroup, Entity, VHDLAST
 import re
 

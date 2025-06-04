@@ -72,8 +72,8 @@ class VHDLAST:
         # Import ANTLR classes
         from antlr4 import InputStream, CommonTokenStream
         from antlr4.error.ErrorListener import ErrorListener
-        from pyhdlio.grammar.vhdlLexer import vhdlLexer
-        from pyhdlio.grammar.vhdlParser import vhdlParser
+        from .grammar.vhdlLexer import vhdlLexer
+        from .grammar.vhdlParser import vhdlParser
         from .visitor import VHDLVisitor
 
         # Custom error listener for VHDL parsing
