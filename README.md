@@ -1,31 +1,38 @@
 # PyHDLio
 
-A Python HDL parsing library using ANTLR4.
+This is the main repository for the `pyhdlio` Python package.
+
+The intial goals of the `pyhdlio` package are:
+1) to enable reading details of entities and their generics and ports from VHDL source files;
+2) to enable the creation of VHDL source from an object hierarchy.
+
+Support for Verilog is planned.
+
+## Acknowledgements
+
+Language processing uses [ANTLR](https://www.antlr.org/).
+
+The VHDL grammar was written by Denis Gavrish.
+
+The VHDL object model uses [pyVHDLModel](https://github.com/VHDL/pyVHDLModel).
 
 ## Installation
 
-To install from this repository, as an editable package:
+End users may obtain and install `pyhdlio` by using `pip`:
 
 ```bash
-pip install -e .
+pip install pyhdlio
 ```
 
-## Usage
+Alternatively, clone this repository and install the package from it:
 
-```python
-from hdlio.vhdl.parse_vhdl import parse_vhdl
-
-# Parse a VHDL file
-parse_tree = parse_vhdl("your_file.vhd")
-print(f"Parse tree: {parse_tree}")
+```bash
+git clone
 ```
 
 ## Examples
 
-Run the simple VHDL parsing example:
-```bash
-python examples/vhdl/simple/simple.py
-```
+See the examples readme [here](examples/README.md).
 
 ## Development
 

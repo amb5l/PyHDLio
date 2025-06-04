@@ -30,18 +30,18 @@ from pathlib import Path
 # Import AST classes and exceptions
 from .ast import VHDLAST, VHDLSyntaxError
 
-# Import pyVHDLModel classes (required)
+# Import pyVHDLModel classes (required) - using explicit re-exports for PyLance clarity
 from pyVHDLModel import Document as BaseDocument
-from pyVHDLModel.DesignUnit import Entity
-from pyVHDLModel.Interface import (
+from pyVHDLModel import Entity
+from pyVHDLModel import (
     GenericConstantInterfaceItem,
     PortSignalInterfaceItem,
     PortGroup
 )
-from pyVHDLModel.Base import Mode
-from pyVHDLModel.Expression import IntegerLiteral, EnumerationLiteral, StringLiteral
-from pyVHDLModel.Symbol import SimpleSubtypeSymbol
-from pyVHDLModel.Name import SimpleName
+from pyVHDLModel import Mode
+from pyVHDLModel import IntegerLiteral, EnumerationLiteral, StringLiteral
+from pyVHDLModel import SimpleSubtypeSymbol
+from pyVHDLModel import SimpleName
 
 class Document(BaseDocument):
     """
