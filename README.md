@@ -11,6 +11,19 @@ Features:
 - Verilog parsing (source → model) (planned)
 - Verilog output (model → source) (planned)
 
+## Usage Example
+
+```python
+from pyhdlio.vhdl import Document
+
+document = Document.FromFile("./design.vhd")
+for entity in document.Entities.values():
+    print(f"Entity: {entity.Identifier}")
+    if entity.PortItems:
+        for port_item in entity.PortItems:
+            print(f"  Port: {port_item.Identifiers[0]}")
+```
+
 ## Acknowledgements
 
 - Language processing uses [ANTLR](https://www.antlr.org/).
