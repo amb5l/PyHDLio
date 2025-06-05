@@ -72,8 +72,8 @@ class VHDLAST:
         # Import ANTLR classes
         from antlr4 import InputStream, CommonTokenStream
         from antlr4.error.ErrorListener import ErrorListener
-        from .grammar.vhdlLexer import vhdlLexer
-        from .grammar.vhdlParser import vhdlParser
+        from .grammar.VHDLLexer import VHDLLexer
+        from .grammar.VHDLParser import VHDLParser
         from .visitor import VHDLVisitor
 
         # Custom error listener for VHDL parsing
@@ -85,17 +85,17 @@ class VHDLAST:
         input_stream = InputStream(vhdl_code)
 
         # Set up lexer and parser
-        lexer = vhdlLexer(input_stream)
+        lexer = VHDLLexer(input_stream)
         stream = CommonTokenStream(lexer)
-        parser = vhdlParser(stream)
+        parser = VHDLParser(stream)
 
         # Add custom error handling
         parser.removeErrorListeners()
         parser.addErrorListener(VHDLErrorListener())
 
         try:
-            # Parse the VHDL code
-            tree = parser.design_file()
+            # Parse the VHDL code using the new grammar
+            tree = parser.rule_DesignFile()
         except Exception as e:
             raise VHDLSyntaxError(f"Failed to parse VHDL code: {str(e)}")
 

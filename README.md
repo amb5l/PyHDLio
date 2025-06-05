@@ -1,24 +1,25 @@
 # PyHDLio
 
-This is the main repository for the `pyhdlio` Python package.
+This is the main repository for the `pyhdlio` Python package, which is intended to support the input and output of HDL source.
 
-The intial goals of the `pyhdlio` package are:
-1) to enable reading details of entities and their generics and ports from VHDL source files;
-2) to enable the creation of VHDL source from an object hierarchy.
-
-Support for Verilog is planned.
+Features:
+- VHDL parsing (source → AST)
+  - port groups inferred from source proximity (empty lines, comments)
+- VHDL object model (AST → model)
+- VHDL output (model → source) (coming soon)
+- Verilog parsing (source → AST) (planned)
+- Verilog object model (AST → model) (planned)
+- Verilog output (model → source) (planned)
 
 ## Acknowledgements
 
-Language processing uses [ANTLR](https://www.antlr.org/).
-
-The VHDL grammar was written by Denis Gavrish.
-
-The VHDL object model uses [pyVHDLModel](https://github.com/VHDL/pyVHDLModel).
+- Language processing uses [ANTLR](https://www.antlr.org/).
+- The VHDL grammar was copied from [pyVHDLParser](https://github.com/VHDL/pyVHDLParser).
+- The VHDL object model uses [pyVHDLModel](https://github.com/VHDL/pyVHDLModel).
 
 ## Installation
 
-End users may obtain and install `pyhdlio` by using `pip`:
+`pyhdlio` may be installed using `pip`:
 
 ```bash
 pip install pyhdlio
@@ -27,7 +28,9 @@ pip install pyhdlio
 Alternatively, clone this repository and install the package from it:
 
 ```bash
-git clone
+git clone https://github.com/amb5l/PyHDLio
+cd PyHDLio
+pip install -e .
 ```
 
 ## Examples
@@ -37,3 +40,14 @@ See the examples readme [here](examples/README.md).
 ## Development
 
 See https://github.com/amb5l/PyHDLio-dev.
+
+
+## License
+
+PyHDLio is distributed under the GNU General Public License v3.0 (GPLv3). See [LICENSE.md](./LICENSE.md) for details.
+
+For license information on ANTLR, see: [ANTLR 4 License](https://www.antlr.org/license.html).
+
+For license information for pyVHDLModel and pyVHDLParser, see:
+- [pyVHDLModel on GitHub](https://github.com/Paebbels/pyVHDLModel)
+- [pyVHDLParser on GitHub](https://github.com/Paebbels/pyVHDLParser)
