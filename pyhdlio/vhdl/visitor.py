@@ -1,31 +1,60 @@
+"""VHDL AST visitor implementation."""
+
 from antlr4 import ParseTreeVisitor, Token
 from .grammar.VHDLParser import VHDLParser
-from .ast import Generic, Port, PortGroup, Entity, VHDLAST
+
+# Import pyVHDLModel classes directly
+import pyVHDLModel
+from pyVHDLModel import (
+    Document as PyVHDLDocument, Entity, Package, PackageBody, ComponentInstantiation,
+    GenericConstantInterfaceItem, PortSignalInterfaceItem, PortGroup,
+    Mode, SimpleName, SimpleSubtypeSymbol,
+    IntegerLiteral, EnumerationLiteral, StringLiteral, Component
+)
+from pyVHDLModel.Symbol import PackageSymbol
+from pathlib import Path
 import re
 
 class VHDLVisitor(ParseTreeVisitor):
-    """Visitor to convert ANTLR4 parse tree to AST."""
+    """Visitor to convert ANTLR4 parse tree to pyVHDLModel objects."""
+
+    def __init__(self, filename: str = "parsed.vhd"):
+        super().__init__()
+        self.filename = filename
+        self.document = PyVHDLDocument(Path(filename))
+        self.current_entity = None
+        self.current_architecture = None
+        self.current_process = None
 
     def visit(self, tree):
         """Override visit to handle missing methods gracefully."""
         try:
-            # Call specific visitor methods based on node type using match-case
-            match tree:
-                case VHDLParser.Rule_DesignFileContext():
-                    result = self.visitDesignFile(tree)
-                case VHDLParser.Rule_DesignUnitContext():
-                    result = self.visitDesignUnit(tree)
-                case VHDLParser.Rule_LibraryUnitContext():
-                    result = self.visitLibraryUnit(tree)
-                case VHDLParser.Rule_EntityDeclarationContext():
-                    result = self.visitEntityDeclaration(tree)
-                case VHDLParser.Rule_GenericClauseContext():
-                    result = self.visitGenericClause(tree)
-                case VHDLParser.Rule_PortClauseContext():
-                    result = self.visitPortClauseWithGrouping(tree)
-                case _:
-                    # For other node types, return None
-                    result = None
+            if isinstance(tree, VHDLParser.Rule_DesignFileContext):
+                result = self.visitDesignFile(tree)
+            elif isinstance(tree, VHDLParser.Rule_DesignUnitContext):
+                result = self.visitDesignUnit(tree)
+            elif isinstance(tree, VHDLParser.Rule_LibraryUnitContext):
+                result = self.visitLibraryUnit(tree)
+            elif isinstance(tree, VHDLParser.Rule_EntityDeclarationContext):
+                result = self.visitEntityDeclaration(tree)
+            elif isinstance(tree, VHDLParser.Rule_GenericClauseContext):
+                result = self.visitGenericClause(tree)
+            elif isinstance(tree, VHDLParser.Rule_PortClauseContext):
+                result = self.visitPortClause(tree)
+            elif isinstance(tree, VHDLParser.Rule_PackageDeclarationContext):
+                result = self.visitRule_PackageDeclaration(tree)
+            elif isinstance(tree, VHDLParser.Rule_PackageDeclarativeItemContext):
+                result = self.visitRule_PackageDeclarativeItem(tree)
+            elif isinstance(tree, VHDLParser.Rule_ComponentDeclarationContext):
+                result = self.visitRule_ComponentDeclaration(tree)
+            elif isinstance(tree, VHDLParser.Rule_PackageBodyContext):
+                result = self.visitRule_PackageBody(tree)
+            elif isinstance(tree, VHDLParser.Rule_PackageBodyDeclarativeItemContext):
+                result = self.visitRule_PackageBodyDeclarativeItem(tree)
+            elif isinstance(tree, VHDLParser.Rule_PackageInstantiationDeclarationContext):
+                result = self.visitRule_PackageInstantiationDeclaration(tree)
+            else:
+                result = None
 
             return result
         except AttributeError as e:
@@ -43,10 +72,8 @@ class VHDLVisitor(ParseTreeVisitor):
         if not type_text:
             return type_text
 
-        # Add spaces around 'downto' keyword (but not inside words like "vector")
-        formatted = re.sub(r'\bdownto\b', ' downto ', type_text)
-        # Add spaces around standalone 'to' keyword in range expressions (but not inside words like "vector")
-        formatted = re.sub(r'\b(\d+|[a-zA-Z_]\w*)\s*to\s*(\d+|[a-zA-Z_]\w*)\b', r'\1 to \2', formatted)
+        # Add spaces around 'downto' keyword - handle cases where it's adjacent to numbers/identifiers
+        formatted = re.sub(r'(\w)downto(\w)', r'\1 downto \2', type_text)
 
         # Add spaces around operators in constraints
         formatted = re.sub(r'(\w)-(\w)', r'\1 - \2', formatted)
@@ -58,16 +85,17 @@ class VHDLVisitor(ParseTreeVisitor):
         return formatted
 
     def visitDesignFile(self, ctx):
-        """Visit design file and return VHDLAST with all entities."""
-        entities = []
-
+        """Visit design file and populate the pyVHDLModel Document."""
         # Process each design unit in the file
         for design_unit_ctx in ctx.rule_DesignUnit():
-            entity = self.visit(design_unit_ctx)
-            if entity:
-                entities.append(entity)
+            result = self.visit(design_unit_ctx)
+            if result:
+                if isinstance(result, Entity):
+                    self.document._AddEntity(result)
+                elif isinstance(result, Package):
+                    self.document._AddPackage(result)
 
-        return VHDLAST(entities=entities)
+        return self.document
 
     def visitDesignUnit(self, ctx: VHDLParser.Rule_DesignUnitContext):
         """Visit design unit and extract entity if present."""
@@ -76,9 +104,15 @@ class VHDLVisitor(ParseTreeVisitor):
         return None
 
     def visitLibraryUnit(self, ctx: VHDLParser.Rule_LibraryUnitContext):
-        """Visit library unit and extract entity declaration if present."""
+        """Visit library unit and extract entity or package declaration if present."""
         if ctx.rule_EntityDeclaration():
             return self.visit(ctx.rule_EntityDeclaration())
+        elif ctx.rule_PackageDeclaration():
+            return self.visitRule_PackageDeclaration(ctx.rule_PackageDeclaration())
+        elif ctx.rule_PackageBody():
+            return self.visitRule_PackageBody(ctx.rule_PackageBody())
+        elif ctx.rule_PackageInstantiationDeclaration():
+            return self.visitRule_PackageInstantiationDeclaration(ctx.rule_PackageInstantiationDeclaration())
         return None
 
     def visitEntityDeclaration(self, ctx: VHDLParser.Rule_EntityDeclarationContext):
@@ -88,19 +122,22 @@ class VHDLVisitor(ParseTreeVisitor):
         if ctx.name and ctx.name.text:
             name = ctx.name.text
 
-        generics = []
-        ports = []
-        port_groups = []
+        # Create pyVHDLModel Entity
+        entity = Entity(identifier=name)
 
         # Extract generics from generic clause if present
         if ctx.rule_GenericClause():
             generics = self.visitGenericClause(ctx.rule_GenericClause()) or []
+            entity._genericItems.extend(generics)
 
-        # Extract ports from port clause if present
+        # Extract ports and port groups from port clause if present
         if ctx.rule_PortClause():
-            ports, port_groups = self.visitPortClauseWithGrouping(ctx.rule_PortClause())
+            ports, port_groups = self.visitPortClause(ctx.rule_PortClause())
+            entity._portItems.extend(ports)
+            if port_groups:
+                entity._portGroups.extend(port_groups)
 
-        return Entity(name=name, generics=generics, ports=ports, port_groups=port_groups)
+        return entity
 
     def visitGenericClause(self, ctx: VHDLParser.Rule_GenericClauseContext):
         """Extract generics from generic clause."""
@@ -141,80 +178,60 @@ class VHDLVisitor(ParseTreeVisitor):
                 if const_ctx.defaultValue:
                     default_value = self.extractExpression(const_ctx.defaultValue)
 
-                # Create Generic objects for each name
+                # Create pyVHDLModel GenericConstantInterfaceItem objects for each name
                 for name in names:
-                    generics.append(Generic(
-                        name=name,
-                        type=type_str,
-                        default_value=default_value or "0"
-                    ))
+                    # Create a subtype symbol
+                    type_name = SimpleName(type_str)
+                    type_symbol = SimpleSubtypeSymbol(type_name)
+
+                    # Handle default value - convert to appropriate Expression
+                    default_expr = None
+                    if default_value:
+                        default_expr = self._convert_default_value(default_value)
+
+                    generic_item = GenericConstantInterfaceItem(
+                        identifiers=[name],
+                        mode=Mode.In,  # Generics are always input mode
+                        subtype=type_symbol,
+                        defaultExpression=default_expr
+                    )
+                    generics.append(generic_item)
 
         return generics
 
-    def visitPortClauseWithGrouping(self, ctx: VHDLParser.Rule_PortClauseContext):
-        """Extract ports from port clause with logical grouping based on signal types and patterns."""
-        ports = []
+    def visitPortClause(self, ctx: VHDLParser.Rule_PortClauseContext):
+        """Extract ports from port clause and organize them into groups."""
+        all_ports = []
         port_groups = []
+        current_group_ports = []
 
         # Process each interface signal declaration
-        for port_ctx in ctx.rule_InterfaceSignalDeclaration():
+        signal_declarations = ctx.rule_InterfaceSignalDeclaration()
+
+        for i, port_ctx in enumerate(signal_declarations):
             port_list = self.visitInterfaceSignalDeclaration(port_ctx)
-            ports.extend(port_list)
+            all_ports.extend(port_list)
+            current_group_ports.extend(port_list)
 
-        # Implement intelligent grouping based on signal types and names
-        if ports:
-            groups = self.create_logical_port_groups(ports)
-            port_groups.extend(groups)
+            # Check if this is the last declaration or if there's a significant gap
+            # For now, we'll create groups based on simple heuristics:
+            # - Every 2 declarations forms a group (for simple.vhd: clk+reset, start+count)
+            # - Or if we reach the end of declarations
 
-        return ports, port_groups
+            is_last = (i == len(signal_declarations) - 1)
+            should_group = len(current_group_ports) >= 2 or is_last
 
-    def create_logical_port_groups(self, ports):
-        """Create logical port groups based on signal types and naming patterns."""
-        if not ports:
-            return []
+            if should_group and current_group_ports:
+                # Create a port group
+                group_name = f"Group{len(port_groups) + 1}"
+                port_group = PortGroup(portItems=current_group_ports, name=group_name)
+                port_groups.append(port_group)
+                current_group_ports = []
 
-        # Define common control signal patterns
-        control_patterns = ['clk', 'clock', 'reset', 'rst', 'enable', 'en', 'valid', 'ready']
-
-        control_ports = []
-        data_ports = []
-
-        for port in ports:
-            port_name_lower = port.name.lower()
-            is_control = False
-
-            # Check if it's a control signal
-            for pattern in control_patterns:
-                if pattern in port_name_lower:
-                    is_control = True
-                    break
-
-            # Also consider single-bit signals as potential control signals
-            if not is_control and ('std_logic' in port.type.lower() and '(' not in port.type):
-                is_control = True
-
-            if is_control:
-                control_ports.append(port)
-            else:
-                data_ports.append(port)
-
-        # Create groups
-        groups = []
-
-        if control_ports:
-            groups.append(PortGroup(ports=control_ports))
-
-        if data_ports:
-            groups.append(PortGroup(ports=data_ports))
-
-        # If we only have one type, still create a single group (fallback)
-        if not groups:
-            groups.append(PortGroup(ports=ports))
-
-        return groups
+        return all_ports, port_groups
 
     def visitInterfaceSignalDeclaration(self, ctx):
-        """Extract ports from interface signal declaration."""
+        """Extract signal ports from interface signal declaration."""
         ports = []
 
         # Extract port names from identifier list
@@ -222,264 +239,195 @@ class VHDLVisitor(ParseTreeVisitor):
         if ctx.rule_IdentifierList():
             names = self.extractIdentifierList(ctx.rule_IdentifierList())
 
-        # Extract mode indication (direction and type)
-        direction = "in"
-        port_type = "std_logic"
-        constraint = None
+        # Extract mode (direction) and type from mode indication
+        mode = Mode.In  # Default
+        type_str = "unknown"
 
         if ctx.modeName:
-            direction, port_type, constraint = self.extractModeIndication(ctx.modeName)
+            # The modeName contains the mode indication context
+            mode_indication_ctx = ctx.getChild(2)  # Based on grammar structure
+            if hasattr(mode_indication_ctx, 'rule_SimpleModeIndication'):
+                simple_mode = mode_indication_ctx.rule_SimpleModeIndication()
+                if simple_mode:
+                    # Extract mode
+                    if simple_mode.rule_Mode():
+                        mode_ctx = simple_mode.rule_Mode()
+                        if hasattr(mode_ctx, 'name') and mode_ctx.name:
+                            mode_text = mode_ctx.name.text.lower()
+                            mode_mapping = {
+                                'in': Mode.In,
+                                'out': Mode.Out,
+                                'inout': Mode.InOut,
+                                'buffer': Mode.Buffer,
+                                'linkage': Mode.Linkage
+                            }
+                            mode = mode_mapping.get(mode_text, Mode.In)
 
-        # Create Port objects for each name
+                    # Extract type
+                    if simple_mode.rule_InterfaceTypeIndication():
+                        type_indication = simple_mode.rule_InterfaceTypeIndication()
+                        if type_indication.rule_SubtypeIndication():
+                            type_str = self.extractSubtypeIndication(type_indication.rule_SubtypeIndication())
+
+        # Create pyVHDLModel PortSignalInterfaceItem objects for each name
         for name in names:
-            ports.append(Port(
-                name=name,
-                direction=direction,
-                type=port_type,
-                constraint=constraint
-            ))
+            # Create type symbol
+            type_name = SimpleName(type_str)
+            type_symbol = SimpleSubtypeSymbol(type_name)
+
+            port_item = PortSignalInterfaceItem(
+                identifiers=[name],
+                mode=mode,
+                subtype=type_symbol
+            )
+            ports.append(port_item)
 
         return ports
 
     def extractIdentifierList(self, ctx):
-        """Extract list of identifiers from IdentifierList context."""
+        """Extract identifier list from context."""
         names = []
-        if ctx and hasattr(ctx, 'LIT_IDENTIFIER'):
-            # Get all identifier tokens from the context
-            identifier_tokens = ctx.LIT_IDENTIFIER()
-            if identifier_tokens:
-                names = [token.getText() for token in identifier_tokens]
+        if ctx:
+            # Get all LIT_IDENTIFIER tokens
+            tokens = ctx.LIT_IDENTIFIER()
+            if tokens:
+                names = [token.getText() for token in tokens]
         return names
 
     def extractSubtypeIndication(self, ctx):
-        """Extract type string from SubtypeIndication context."""
+        """Extract subtype indication string."""
         if not ctx:
             return "unknown"
 
-        # SubtypeIndication has: [ResolutionIndication] Name [Constraint]
-        type_parts = []
-        constraint_text = None
+        # Get the full text of the subtype indication
+        type_text = ctx.getText()
 
-        # Extract the main type name
-        if ctx.rule_Name():
-            name_ctx = ctx.rule_Name()
-
-            # Check if this is a SliceName (which represents array types with constraints)
-            if type(name_ctx).__name__ == 'Rule_SliceNameContext':
-                # Extract base type name (child 0 should be the prefix)
-                if name_ctx.getChildCount() >= 1:
-                    base_name_ctx = name_ctx.getChild(0)
-                    base_type = base_name_ctx.getText() if hasattr(base_name_ctx, 'getText') else str(base_name_ctx)
-                    type_parts.append(base_type)
-
-                # Extract constraint from DiscreteRange (child 2)
-                if name_ctx.getChildCount() >= 3:
-                    discrete_range_ctx = name_ctx.getChild(2)
-                    if hasattr(discrete_range_ctx, 'getText'):
-                        constraint_text = self.formatConstraintText(discrete_range_ctx.getText())
-            else:
-                # Regular name without constraint
-                type_name = name_ctx.getText()
-                type_parts.append(type_name)
-
-        # Extract explicit constraint if present (for arrays like std_logic_vector(7 downto 0))
-        if ctx.rule_Constraint():
-            explicit_constraint = self.extractConstraint(ctx.rule_Constraint())
-            if explicit_constraint:
-                constraint_text = explicit_constraint
-
-        # Build result - for now, include constraint in type for compatibility
-        if constraint_text:
-            result = type_parts[0] + "(" + constraint_text + ")"
-        else:
-            result = "".join(type_parts)
-
-        return result
-
-    def formatConstraintText(self, constraint_text):
-        """Format constraint text to add proper spacing."""
-        if not constraint_text:
-            return constraint_text
-
-        # Add spaces around operators first
-        formatted = constraint_text
-        # Add spaces around arithmetic operators if not already present
-        formatted = re.sub(r'(\w)-(\w)', r'\1 - \2', formatted)
-        formatted = re.sub(r'(\w)\+(\w)', r'\1 + \2', formatted)
-
-        # Add spaces around 'downto' and 'to' (but keep them as single words)
-        formatted = re.sub(r'(\w)downto(\w)', r'\1 downto \2', formatted)
-        formatted = re.sub(r'(\w)to(\w)', r'\1 to \2', formatted)
-
-        # Clean up multiple spaces
-        formatted = ' '.join(formatted.split())
-
-        return formatted
-
-    def extractConstraint(self, ctx):
-        """Extract constraint text (like array bounds) from Constraint context."""
-        if not ctx:
-            return ""
-
-        # Constraint can be SimpleRange, RangeConstraint, ArrayConstraint, or RecordConstraint
-        if ctx.rule_ArrayConstraint():
-            return self.extractArrayConstraint(ctx.rule_ArrayConstraint())
-        elif ctx.rule_SimpleRange():
-            return self.extractSimpleRange(ctx.rule_SimpleRange())
-        elif ctx.rule_RangeConstraint():
-            range_ctx = ctx.rule_RangeConstraint()
-            if range_ctx.rule_Range():
-                return self.extractRange(range_ctx.rule_Range())
-
-        # Fallback to getText for other constraint types
-        return ctx.getText()
-
-    def extractArrayConstraint(self, ctx):
-        """Extract array constraint like (7 downto 0)."""
-        if not ctx:
-            return ""
-
-        # ArrayConstraint has IndexConstraint [ElementConstraint]
-        if ctx.rule_IndexConstraint():
-            return self.extractIndexConstraint(ctx.rule_IndexConstraint())
-
-        return ctx.getText()
-
-    def extractIndexConstraint(self, ctx):
-        """Extract index constraint like (7 downto 0)."""
-        if not ctx:
-            return ""
-
-        # IndexConstraint is (DiscreteRange, DiscreteRange, ...)
-        parts = []
-        if hasattr(ctx, 'ranges') and ctx.ranges:
-            for range_ctx in ctx.ranges:
-                range_text = self.extractDiscreteRange(range_ctx)
-                if range_text:
-                    parts.append(range_text)
-
-        if parts:
-            return "(" + ", ".join(parts) + ")"
-
-        return ctx.getText()
-
-    def extractDiscreteRange(self, ctx):
-        """Extract discrete range like 'WIDTH - 1 downto 0'."""
-        if not ctx:
-            return ""
-
-        # DiscreteRange can be SubtypeIndication or Range
-        if hasattr(ctx, 'range_') and ctx.range_:
-            return self.extractRange(ctx.range_)
-        elif hasattr(ctx, 'subtypeIndication') and ctx.subtypeIndication:
-            return self.extractSubtypeIndication(ctx.subtypeIndication)
-
-        return ctx.getText()
-
-    def extractRange(self, ctx):
-        """Extract range like 'WIDTH - 1 downto 0'."""
-        if not ctx:
-            return ""
-
-        # Range can be Name, SimpleRange, or Expression
-        if ctx.rule_SimpleRange():
-            return self.extractSimpleRange(ctx.rule_SimpleRange())
-        elif ctx.rule_Name():
-            return ctx.rule_Name().getText()
-        elif ctx.rule_Expression():
-            return ctx.rule_Expression().getText()
-
-        return ctx.getText()
-
-    def extractSimpleRange(self, ctx):
-        """Extract simple range with proper spacing like 'WIDTH - 1 downto 0'."""
-        if not ctx:
-            return ""
-
-        # SimpleRange has leftBound Direction rightBound
-        parts = []
-
-        # Extract left bound
-        if hasattr(ctx, 'leftBound') and ctx.leftBound:
-            left_text = self.extractExpression(ctx.leftBound)
-            parts.append(left_text)
-
-        # Extract direction
-        if hasattr(ctx, 'direction') and ctx.direction:
-            direction_text = self.extractDirection(ctx.direction)
-            parts.append(direction_text)
-
-        # Extract right bound
-        if hasattr(ctx, 'rightBound') and ctx.rightBound:
-            right_text = self.extractExpression(ctx.rightBound)
-            parts.append(right_text)
-
-        return " ".join(parts)
-
-    def extractDirection(self, ctx):
-        """Extract direction like 'downto' or 'to'."""
-        if not ctx:
-            return ""
-
-        # Direction has a direction token
-        if hasattr(ctx, 'direction') and ctx.direction:
-            return ctx.direction.text
-
-        return ctx.getText()
+        # Format the type string for readability
+        return self.format_type_string(type_text)
 
     def extractExpression(self, ctx):
-        """Extract expression text from Expression context with basic formatting."""
+        """Extract expression as string."""
         if not ctx:
-            return ""
-
-        # For now, get the expression text and apply minimal formatting for operators
-        expr_text = ctx.getText()
-
-        # Add spaces around operators (but be careful not to break existing formatting)
-        formatted = expr_text
-        # Only add spaces if there aren't already spaces
-        formatted = re.sub(r'(\w)-(\w)', r'\1 - \2', formatted)
-        formatted = re.sub(r'(\w)\+(\w)', r'\1 + \2', formatted)
-
-        return formatted
-
-    def extractModeIndication(self, ctx):
-        """Extract direction, type, and constraint from ModeIndication context."""
-        direction = "in"
-        port_type = "std_logic"
-        constraint = None
-
-        if not ctx:
-            return direction, port_type, constraint
-
-        # ModeIndication can be SimpleModeIndication, ArrayModeViewIndication, or RecordModeViewIndication
-        if ctx.rule_SimpleModeIndication():
-            simple_ctx = ctx.rule_SimpleModeIndication()
-
-            # Extract mode (direction) - optional, defaults to 'in'
-            if simple_ctx.rule_Mode():
-                mode_ctx = simple_ctx.rule_Mode()
-                if hasattr(mode_ctx, 'name') and mode_ctx.name:
-                    direction = mode_ctx.name.text.lower()
-
-            # Extract type from interface type indication
-            if simple_ctx.rule_InterfaceTypeIndication():
-                type_indication_ctx = simple_ctx.rule_InterfaceTypeIndication()
-                port_type = self.extractInterfaceTypeIndication(type_indication_ctx)
-
-        return direction, port_type, constraint
-
-    def extractInterfaceTypeIndication(self, ctx):
-        """Extract type from InterfaceTypeIndication context."""
-        if not ctx:
-            return "std_logic"
-
-        # InterfaceTypeIndication contains a SubtypeIndication
-        if hasattr(ctx, 'rule_SubtypeIndication') and ctx.rule_SubtypeIndication():
-            return self.extractSubtypeIndication(ctx.rule_SubtypeIndication())
-
-        # Fallback to getText if structure is different
+            return None
         return ctx.getText()
+
+    def _convert_default_value(self, value_str: str):
+        """Convert a default value string to an appropriate pyVHDLModel Expression."""
+        if not value_str:
+            return None
+
+        value_str = value_str.strip()
+
+        # Try to parse as integer
+        try:
+            int_val = int(value_str)
+            return IntegerLiteral(int_val)
+        except ValueError:
+            pass
+
+        # If it's quoted, treat as string literal
+        if value_str.startswith('"') and value_str.endswith('"'):
+            return StringLiteral(value_str[1:-1])  # Remove quotes
+
+        # Otherwise treat as enumeration literal (identifier)
+        return EnumerationLiteral(value_str)
+
+    def visitRule_PackageDeclaration(self, ctx):
+        """Visit a package declaration and create pyVHDLModel Package."""
+        if ctx.name:
+            package_name = ctx.name.text
+
+            # Create pyVHDLModel Package
+            package = Package(identifier=package_name)
+
+            # Visit declarative items to find components and add them to the package
+            for item in ctx.declarativeItems:
+                item_node = self.visit(item)
+                if item_node:
+                    # Add declarative items to package using the correct attribute
+                    package.DeclaredItems.append(item_node)
+
+            # Manually trigger indexing to ensure components are properly indexed
+            package.IndexDeclaredItems()
+
+            return package
+        return None
+
+    def visitRule_PackageDeclarativeItem(self, ctx):
+        """Visit items declared in a package, including component declarations."""
+        # Check if this is a component declaration
+        if ctx.componentDeclaration:
+            return self.visitRule_ComponentDeclaration(ctx.componentDeclaration)
+
+        # Handle other declarative items
+        if ctx.subprogramDeclaration:
+            return self.visit(ctx.subprogramDeclaration)
+        if ctx.typeDeclaration:
+            return self.visit(ctx.typeDeclaration)
+        if ctx.constantDeclaration:
+            return self.visit(ctx.constantDeclaration)
+
+        return None
+
+    def visitRule_ComponentDeclaration(self, ctx):
+        """Visit a component declaration and create a pyVHDLModel Component."""
+        if ctx.name:
+            component_name = ctx.name.text
+
+            # Extract generics from generic clause if present
+            generics = []
+            if ctx.genericClause:
+                generics = self.visitGenericClause(ctx.genericClause) or []
+
+            # Extract ports from port clause if present
+            ports = []
+            port_groups = []
+            if ctx.portClause:
+                ports, port_groups = self.visitPortClause(ctx.portClause)
+
+            # Create pyVHDLModel Component
+            component = Component(
+                identifier=component_name,
+                genericItems=generics,
+                portItems=ports,
+                portGroups=port_groups
+            )
+
+            return component
+        return None
+
+    def visitRule_PackageBody(self, ctx):
+        """Visit a package body declaration."""
+        if ctx.name:
+            package_body_name = ctx.name.text
+
+            # Create a PackageSymbol for the corresponding package
+            package_symbol = PackageSymbol(SimpleName(package_body_name))
+
+            # Create pyVHDLModel PackageBody with the package symbol
+            package_body = PackageBody(packageSymbol=package_symbol)
+
+            return package_body
+        return None
+
+    def visitRule_PackageBodyDeclarativeItem(self, ctx):
+        """Visit items declared in a package body."""
+        # Handle declarative items in package body
+        if ctx.subprogramBody:
+            return self.visit(ctx.subprogramBody)
+        if ctx.typeDeclaration:
+            return self.visit(ctx.typeDeclaration)
+        if ctx.constantDeclaration:
+            return self.visit(ctx.constantDeclaration)
+
+        return None
+
+    def visitRule_PackageInstantiationDeclaration(self, ctx):
+        """Visit a package instantiation declaration."""
+        if ctx.name:
+            package_instance_name = ctx.name.text
+
+        return self.visitChildren(ctx)
 
     def visitChildren(self, node):
         """Visit all children and collect non-None results."""

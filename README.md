@@ -3,12 +3,12 @@
 This is the main repository for the `pyhdlio` Python package, which is intended to support the input and output of HDL source.
 
 Features:
-- VHDL parsing (source → AST)
+- VHDL object model
+- VHDL parsing (source → model)
   - port groups inferred from source proximity (empty lines, comments)
-- VHDL object model (AST → model)
 - VHDL output (model → source) (coming soon)
-- Verilog parsing (source → AST) (planned)
-- Verilog object model (AST → model) (planned)
+- Verilog object model (planned)
+- Verilog parsing (source → model) (planned)
 - Verilog output (model → source) (planned)
 
 ## Acknowledgements
@@ -19,13 +19,13 @@ Features:
 
 ## Installation
 
-`pyhdlio` may be installed using `pip`:
+It is intended that `pyhdlio` be installed using `pip` as shown below. This method is not yet working.
 
 ```bash
 pip install pyhdlio
 ```
 
-Alternatively, clone this repository and install the package from it:
+Alternatively, clone this repository and install the package from it. Note that the `-e` option makes the package editable.
 
 ```bash
 git clone https://github.com/amb5l/PyHDLio

@@ -1,3 +1,27 @@
-from .visitor import VHDLVisitor
-from .ast import VHDLAST, Entity, Generic, Port, PortGroup, VHDLSyntaxError
-from . import model
+__all__ = [
+    "Document",
+    "Context",
+    "Entity",
+    "Architecture",
+    "Configuration",
+    "Package",
+    "PackageBody",
+    "Component",
+    "PortSignalInterfaceItem",
+    "GenericConstantInterfaceItem",
+    "VHDLSyntaxError"
+]
+
+from .model import (
+    Document,
+    Context,
+    Entity,
+    Architecture,
+    Configuration,
+    Package,
+    PackageBody,
+    Component,
+    PortSignalInterfaceItem,
+    GenericConstantInterfaceItem,
+    VHDLSyntaxError
+)
