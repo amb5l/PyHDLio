@@ -200,7 +200,7 @@ class VHDLVisitor(ParseTreeVisitor):
         return generics
 
     def visitPortClause(self, ctx: VHDLParser.Rule_PortClauseContext):
-        """Extract ports from port clause and organize them into groups."""
+        """Extract ports from port clause and organize them into groups based on line gaps."""
         all_ports = []
         port_groups = []
         current_group_ports = []
@@ -208,25 +208,43 @@ class VHDLVisitor(ParseTreeVisitor):
         # Process each interface signal declaration
         signal_declarations = ctx.rule_InterfaceSignalDeclaration()
 
+        prev_end_line = None
+
         for i, port_ctx in enumerate(signal_declarations):
             port_list = self.visitInterfaceSignalDeclaration(port_ctx)
             all_ports.extend(port_list)
-            current_group_ports.extend(port_list)
 
-            # Check if this is the last declaration or if there's a significant gap
-            # For now, we'll create groups based on simple heuristics:
-            # - Every 2 declarations forms a group (for simple.vhd: clk+reset, start+count)
-            # - Or if we reach the end of declarations
+            # Get line numbers for this declaration
+            start_token = port_ctx.start
+            end_token = port_ctx.stop
+            current_start_line = start_token.line if start_token else None
+            current_end_line = end_token.line if end_token else None
 
-            is_last = (i == len(signal_declarations) - 1)
-            should_group = len(current_group_ports) >= 2 or is_last
+            # Check if there's a significant gap from the previous declaration
+            should_start_new_group = False
+            if prev_end_line is not None and current_start_line is not None:
+                # If there's more than 1 line gap, start a new group
+                line_gap = current_start_line - prev_end_line
+                if line_gap > 2:  # More than just a single blank line
+                    should_start_new_group = True
 
-            if should_group and current_group_ports:
-                # Create a port group
+            # If we should start a new group and have accumulated ports, finalize the current group
+            if should_start_new_group and current_group_ports:
                 group_name = f"Group{len(port_groups) + 1}"
                 port_group = PortGroup(portItems=current_group_ports, name=group_name)
                 port_groups.append(port_group)
                 current_group_ports = []
+
+            # Add current ports to the current group
+            current_group_ports.extend(port_list)
+            prev_end_line = current_end_line
+
+            # Handle the last declaration
+            is_last = (i == len(signal_declarations) - 1)
+            if is_last and current_group_ports:
+                group_name = f"Group{len(port_groups) + 1}"
+                port_group = PortGroup(portItems=current_group_ports, name=group_name)
+                port_groups.append(port_group)
 
         return all_ports, port_groups
 

@@ -28,11 +28,10 @@ Document instance created from: sample.vhd
         a: std_logic
         b: std_logic
         y: std_logic
-      Port Groups: 2
-        Group1: 2 ports
+      Port Groups: 1
+        Group1: 3 ports
           a: std_logic
           b: std_logic
-        Group2: 1 ports
           y: std_logic
 
     Entity: processor
@@ -57,29 +56,25 @@ Document instance created from: sample.vhd
         interrupt: std_logic_vector(7 downto 0)
         status: std_logic_vector(15 downto 0)
         debug_mode: std_logic
-      Port Groups: 8
+      Port Groups: 4
         Group1: 2 ports
           clk: std_logic
           reset: std_logic
-        Group2: 2 ports
+        Group2: 4 ports
           inst_addr: std_logic_vector(ADDR_WIDTH - 1 downto 0)
           inst_data: std_logic_vector(DATA_WIDTH - 1 downto 0)
-        Group3: 2 ports
           inst_valid: std_logic
           inst_ready: std_logic
-        Group4: 2 ports
+        Group3: 6 ports
           data_addr: std_logic_vector(ADDR_WIDTH - 1 downto 0)
           data_rdata: std_logic_vector(DATA_WIDTH - 1 downto 0)
-        Group5: 2 ports
           data_wdata: std_logic_vector(DATA_WIDTH - 1 downto 0)
           data_we: std_logic
-        Group6: 2 ports
           data_valid: std_logic
           data_ready: std_logic
-        Group7: 2 ports
+        Group4: 3 ports
           interrupt: std_logic_vector(7 downto 0)
           status: std_logic_vector(15 downto 0)
-        Group8: 1 ports
           debug_mode: std_logic
 
   Architectures : 0
@@ -101,14 +96,12 @@ Document instance created from: sample.vhd
           enable: std_logic
           count: std_logic_vector(WIDTH - 1 downto 0)
           overflow: std_logic
-          Port Groups: 3
-          Group1: 2 ports
+          Port Groups: 1
+          Group1: 5 ports
             clk: std_logic
             reset: std_logic
-          Group2: 2 ports
             enable: std_logic
             count: std_logic_vector(WIDTH - 1 downto 0)
-          Group3: 1 ports
             overflow: std_logic
 
         Component: memory
@@ -122,14 +115,12 @@ Document instance created from: sample.vhd
           addr: std_logic_vector(ADDR_WIDTH - 1 downto 0)
           din: std_logic_vector(DATA_WIDTH - 1 downto 0)
           dout: std_logic_vector(DATA_WIDTH - 1 downto 0)
-          Port Groups: 3
-          Group1: 2 ports
+          Port Groups: 1
+          Group1: 6 ports
             clk: std_logic
             reset: std_logic
-          Group2: 2 ports
             we: std_logic
             addr: std_logic_vector(ADDR_WIDTH - 1 downto 0)
-          Group3: 2 ports
             din: std_logic_vector(DATA_WIDTH - 1 downto 0)
             dout: std_logic_vector(DATA_WIDTH - 1 downto 0)
 
